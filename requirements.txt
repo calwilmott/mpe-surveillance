@@ -9,4 +9,5 @@ setuptools==68.0.0
 six==1.16.0
 typing-extensions==4.8.0
 wheel==0.41.2
+matplotlib==3.8.3
 
