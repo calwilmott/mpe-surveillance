@@ -1,7 +1,7 @@
 import numpy as np
 from multiagent.core import World, Agent, Obstacle
 from multiagent.scenario import BaseScenario
-
+from multiagent.utils.general import get_grid_coord, get_line_bresenham
 
 class SurveyScenario(BaseScenario):
     def __init__(self, num_obstacles, num_agents, vision_dist, grid_resolution, grid_max_reward, reward_delta, observation_mode):
@@ -162,64 +162,18 @@ class SurveyScenario(BaseScenario):
         return True if dist < dist_min else False
 
     def reward(self, agent, world):
-        def get_grid_coord(pos):
-            """Converts a position to grid coordinates."""
-            return min(int((pos + 1) / 2 * self.grid_resolution), self.grid_resolution - 1)
-
-        def get_line(start, end):
-            """Generate the points of a line using Bresenham's algorithm."""
-            # Setup initial conditions
-            x1, y1 = start
-            x2, y2 = end
-            dx = x2 - x1
-            dy = y2 - y1
-
-            is_steep = abs(dy) > abs(dx)  # Determine how steep the line is
-
-            # Rotate line if steep
-            if is_steep:
-                x1, y1 = y1, x1
-                x2, y2 = y2, x2
-
-            # Swap start and end points if necessary
-            swapped = False
-            if x1 > x2:
-                x1, x2 = x2, x1
-                y1, y2 = y2, y1
-                swapped = True
-
-            dx = x2 - x1
-            dy = y2 - y1
-
-            error = dx / 2.0
-            ystep = 1 if y1 < y2 else -1
-
-            y = y1
-            points = []
-            for x in range(x1, x2 + 1):
-                coord = (y, x) if is_steep else (x, y)
-                points.append(coord)
-                error -= abs(dy)
-                if error < 0:
-                    y += ystep
-                    error += dx
-
-            if swapped:
-                points.reverse()
-
-            return points
 
         # Calculate start and end points in grid coordinates
-        start_x = get_grid_coord(agent.state.p_pos[0])
-        start_y = get_grid_coord(agent.state.p_pos[1])
-        end_x = get_grid_coord(agent.state.p_pos[0] + agent.vision_dist * np.cos(agent.state.p_angle))
-        end_y = get_grid_coord(agent.state.p_pos[1] + agent.vision_dist * np.sin(agent.state.p_angle))
+        start_x = get_grid_coord(agent.state.p_pos[0], self.grid_resolution)
+        start_y = get_grid_coord(agent.state.p_pos[1], self.grid_resolution)
+        end_x = get_grid_coord(agent.state.p_pos[0] + agent.vision_dist * np.cos(agent.state.p_angle), self.grid_resolution)
+        end_y = get_grid_coord(agent.state.p_pos[1] + agent.vision_dist * np.sin(agent.state.p_angle), self.grid_resolution)
 
         reward = world.grid[start_x, start_y]  # Initialize reward
         world.grid[start_x, start_y] = 0  # Clear the agent's current square
 
         # Use Bresenham's algorithm to accurately determine the line of sight
-        line_points = get_line((start_x, start_y), (end_x, end_y))
+        line_points = get_line_bresenham((start_x, start_y), (end_x, end_y))
 
         for (x, y) in line_points:
             if 0 <= x < self.grid_resolution and 0 <= y < self.grid_resolution:
@@ -257,23 +211,13 @@ class SurveyScenario(BaseScenario):
         return (left_bound <= ax <= right_bound) and (bottom_bound <= ay <= top_bound)
     
     def _get_img_obs(self, agent, world):
-        """
-        Generates an image-based observation for the given agent with a global view.
-
-        The observation is a grid of size (self.grid_resolution, self.grid_resolution) with the following channels:
-        - Agent's position: Binary grid indicating the agent's current position.
-        - Agent's field of vision: Binary grid indicating the squares within the agent's field of vision.
-        - Other agents' positions: Binary grid indicating the positions of other agents.
-        - Other agents' fields of vision: Binary grid indicating the squares within other agents' fields of vision.
-        - Obstacles: Binary grid indicating the locations of obstacles.
-        - Reward values: Grid containing the reward values of each grid square.
-        - Reward mask: Binary grid indicating the grid squares where rewards are available.
-        """
         # Initialize the observation grid with zeros
         obs_grid = np.zeros((self.grid_resolution, self.grid_resolution, 7))
 
         # Set the agent's position channel
         agent_x, agent_y = self._pos_to_grid(agent.state.p_pos)
+        agent_x = min(agent_x, self.grid_resolution - 1)  # Ensure agent_x is within bounds
+        agent_y = min(agent_y, self.grid_resolution - 1)  # Ensure agent_y is within bounds
         obs_grid[agent_x, agent_y, 0] = 1
 
         # Set the agent's field of vision channel
@@ -287,6 +231,8 @@ class SurveyScenario(BaseScenario):
         for other in world.agents:
             if other is not agent:
                 other_x, other_y = self._pos_to_grid(other.state.p_pos)
+                other_x = min(other_x, self.grid_resolution - 1)  # Ensure other_x is within bounds
+                other_y = min(other_y, self.grid_resolution - 1)  # Ensure other_y is within bounds
                 obs_grid[other_x, other_y, 2] = 1
                 for x in range(max(0, other_x - int(other.vision_dist * self.grid_resolution / 2)),
                             min(self.grid_resolution, other_x + int(other.vision_dist * self.grid_resolution / 2) + 1)):
@@ -304,6 +250,7 @@ class SurveyScenario(BaseScenario):
         obs_grid[:, :, 6] = world.reward_mask
 
         return obs_grid
+
 
 
     def _pos_to_grid(self, pos):
