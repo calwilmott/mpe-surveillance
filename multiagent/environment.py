@@ -13,7 +13,7 @@ class MultiAgentEnv(gym.Env):
 
     def __init__(self, world, reset_callback=None, reward_callback=None,
                  observation_callback=None, info_callback=None,
-                 done_callback=None, shared_viewer=True, observation_mode="dense", observation_shape=None):
+                 done_callback=None, shared_viewer=True):
 
         self.world = world
         self.agents = self.world.policy_agents
@@ -68,13 +68,8 @@ class MultiAgentEnv(gym.Env):
                 self.action_space.append(total_action_space[0])
             # observation space
             obs_dim = len(observation_callback(agent, self.world))
-            if observation_mode == 'dense':
-                self.observation_space.append(spaces.Box(low=-np.inf, high=+np.inf, shape=(obs_dim,), dtype=np.float32))
-            elif observation_mode == 'image':
-                self.observation_space.append(spaces.Box(low=0, high=1, shape=observation_shape, dtype=np.float32))            
-            else:
-                raise ValueError(f"Unknown observation mode: {observation_mode}")
-            print(self.observation_space)
+            self.observation_space.append(spaces.Box(low=-np.inf, high=+np.inf, shape=(obs_dim,), dtype=np.float32))
+            print(self.observation_space, self.action_space)
             agent.action.c = np.zeros(self.world.dim_c)
 
         # rendering

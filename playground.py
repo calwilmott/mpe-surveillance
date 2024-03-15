@@ -1,6 +1,8 @@
 import numpy as np
 import time
 from multiagent.survey_environment import SurveyEnv
+from DDQN.Trainer import DDQNTrainer, DDQNTrainerParams
+from DDQN.Agent import DDQNAgent, DDQNAgentParams
 from multiagent.utils.visualization import visualize_image_observation
 # Change to have all of the configurable items out of the scenario
 # Would be good to have a configuration loader method as well
@@ -8,6 +10,8 @@ from multiagent.utils.visualization import visualize_image_observation
 env = SurveyEnv(num_agents=3, num_obstacles=4, vision_dist=0.2, grid_resolution=10, grid_max_reward=1, reward_delta=0.001, observation_mode="image")
 env.reset()
 print(env.agents)
+agent = DDQNAgent(params=DDQNAgentParams, )
+trainer = DDQNTrainer(params=DDQNTrainerParams, agent=agent)
 
 while True:
     # first dimension in action space is number of agents, second is action space
