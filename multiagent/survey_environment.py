@@ -25,4 +25,6 @@ class SurveyEnv(MultiAgentEnv):
 
         world = self.scenario.make_world()
         # Initialize the parent class with the necessary functions
-        super().__init__(world, self.scenario.reset_world, self.scenario.reward, self.scenario.observation, observation_mode=observation_mode, observation_shape=self.scenario._get_img_obs(world.agents[0], world).shape)
+        obs_shape = self.scenario._get_img_obs(world.agents[0], world).shape
+        super().__init__(world, self.scenario.reset_world, self.scenario.reward, self.scenario.observation,
+                         observation_mode=observation_mode, observation_shape=obs_shape)

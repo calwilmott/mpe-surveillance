@@ -31,9 +31,9 @@ class DDQNAgentParams:
         self.soft_max_scaling = 0.1
 
         # Global-Local Map
-        self.use_global_local = True
-        self.global_map_scaling = 3
-        self.local_map_size = 17
+        self.use_global_local = False
+        self.global_map_scaling = 1  # Original: 3
+        self.local_map_size = 6  # Original: 17
 
         # Printing
         self.print_summary = False
@@ -41,46 +41,60 @@ class DDQNAgentParams:
 
 class DDQNAgent(object):
 
-    def __init__(self, params: DDQNAgentParams, example_state, example_action, stats=None):
-
+    def __init__(self, params: DDQNAgentParams, example_state, action_space, stats=None, observation_mode="image"):
         self.params = params
+        self.obs_mode = observation_mode
         gamma = tf.constant(self.params.gamma, dtype=float)
         self.align_counter = 0
 
-        #self.boolean_map_shape = example_state.get_boolean_map_shape()
-        #self.float_map_shape = example_state.get_float_map_shape()
-        #self.scalars = example_state.get_num_scalars()
+        if self.obs_mode == "image":
+            grid_dim = np.shape(example_state)[0]
+            self.boolean_map_shape = (grid_dim, grid_dim, np.shape(example_state)[2] - 1)
+            self.float_map_shape = (grid_dim, grid_dim, 1)
+            self.scalars = None
+        else:
+            self.boolean_map_shape = example_state.get_boolean_map_shape()
+            self.float_map_shape = example_state.get_float_map_shape()
+            self.scalars = example_state.get_num_scalars()
 
-
-        self.num_actions = len(type(example_action))
-        self.num_map_channels = self.boolean_map_shape[2] + self.float_map_shape[2]
+        self.num_actions = action_space.n
+        self.num_map_channels = example_state[2]
 
         # Create shared inputs
-        boolean_map_input = Input(shape=self.boolean_map_shape, name='boolean_map_input', dtype=tf.bool)
         float_map_input = Input(shape=self.float_map_shape, name='float_map_input', dtype=tf.float32)
-        scalars_input = Input(shape=(self.scalars,), name='scalars_input', dtype=tf.float32)
-        action_input = Input(shape=(), name='action_input', dtype=tf.int64)
+        states = [float_map_input]
+
+        if self.boolean_map_shape is not None:
+            boolean_map_input = Input(shape=self.boolean_map_shape, name='boolean_map_input', dtype=tf.bool)
+            states.append(boolean_map_input)
+            map_cast = tf.cast(boolean_map_input, dtype=tf.float32)
+            padded_map = tf.concat([map_cast, float_map_input], axis=3)
+        else:
+            boolean_map_input = None
+            padded_map = tf.concat([float_map_input], axis=3)
+        if self.scalars is not None:
+            scalars_input = Input(shape=(self.scalars,), name='scalars_input', dtype=tf.float32)
+            states.append(scalars_input)
+        else:
+            scalars_input = None
+        action_input = Input(shape=(self.num_actions,), name='action_input', dtype=tf.float32)
         reward_input = Input(shape=(), name='reward_input', dtype=tf.float32)
         termination_input = Input(shape=(), name='termination_input', dtype=tf.bool)
         q_star_input = Input(shape=(), name='q_star_input', dtype=tf.float32)
-        states = [boolean_map_input,
-                  float_map_input,
-                  scalars_input]
-
-        map_cast = tf.cast(boolean_map_input, dtype=tf.float32)
-        padded_map = tf.concat([map_cast, float_map_input], axis=3)
 
         self.q_network = self.build_model(padded_map, scalars_input, states)
         self.target_network = self.build_model(padded_map, scalars_input, states, 'target_')
         self.hard_update()
 
         if self.params.use_global_local:
-            self.global_map_model = Model(inputs=[boolean_map_input, float_map_input],
-                                          outputs=self.global_map)
-            self.local_map_model = Model(inputs=[boolean_map_input, float_map_input],
-                                         outputs=self.local_map)
-            self.total_map_model = Model(inputs=[boolean_map_input, float_map_input],
-                                         outputs=self.total_map)
+            if boolean_map_input is None:
+                self.global_map_model = Model(inputs=[float_map_input], outputs=self.global_map)
+                self.local_map_model = Model(inputs=[float_map_input], outputs=self.local_map)
+                self.total_map_model = Model(inputs=[float_map_input], outputs=self.total_map)
+            else:
+                self.global_map_model = Model(inputs=[boolean_map_input, float_map_input], outputs=self.global_map)
+                self.local_map_model = Model(inputs=[boolean_map_input, float_map_input], outputs=self.local_map)
+                self.total_map_model = Model(inputs=[boolean_map_input, float_map_input], outputs=self.total_map)
 
         q_values = self.q_network.output
         q_target_values = self.target_network.output
@@ -94,18 +108,27 @@ class DDQNAgent(object):
         self.q_star_model = Model(inputs=states, outputs=q_star)
 
         # Define Bellman loss
-        one_hot_rm_action = tf.one_hot(action_input, depth=self.num_actions, on_value=1.0, off_value=0.0, dtype=float)
-        one_cold_rm_action = tf.one_hot(action_input, depth=self.num_actions, on_value=0.0, off_value=1.0, dtype=float)
-        q_old = tf.stop_gradient(tf.multiply(q_values, one_cold_rm_action))
+        # one_hot_rm_action = tf.one_hot(action_input, depth=self.num_actions, on_value=1.0, off_value=0.0, dtype=float)
+        # one_cold_rm_action = tf.one_hot(action_input, depth=self.num_actions, on_value=0.0, off_value=1.0, dtype=float)
+        # q_old = tf.stop_gradient(tf.multiply(q_values, one_cold_rm_action))
+        ones_vector = np.ones((self.num_actions,), dtype=np.float32)[tf.newaxis, ...]
+        cold_action_input = tf.subtract(ones_vector, action_input)
+
+        q_old = tf.stop_gradient(tf.multiply(q_values, cold_action_input))
         gamma_terminated = tf.multiply(tf.cast(tf.math.logical_not(termination_input), tf.float32), gamma)
         q_update = tf.expand_dims(tf.add(reward_input, tf.multiply(q_star_input, gamma_terminated)), 1)
-        q_update_hot = tf.multiply(q_update, one_hot_rm_action)
+        # q_update_hot = tf.multiply(q_update, one_hot_rm_action)
+        q_update_hot = tf.multiply(q_update, action_input)
         q_new = tf.add(q_update_hot, q_old)
         q_loss = tf.losses.MeanSquaredError()(q_new, q_values)
-        self.q_loss_model = Model(
-            inputs=[boolean_map_input, float_map_input, scalars_input, action_input, reward_input,
-                    termination_input, q_star_input],
-            outputs=q_loss)
+
+        q_loss_model_inputs = [float_map_input]
+        if boolean_map_input is not None:
+            q_loss_model_inputs.append(boolean_map_input)
+        if scalars_input is not None:
+            q_loss_model_inputs.append(scalars_input)
+        q_loss_model_inputs.extend([action_input, reward_input, termination_input, q_star_input])
+        self.q_loss_model = Model(inputs=q_loss_model_inputs, outputs=q_loss)
 
         # Exploit act model
         self.exploit_model = Model(inputs=states, outputs=max_action)
@@ -128,10 +151,14 @@ class DDQNAgent(object):
 
         flatten_map = self.create_map_proc(map_proc, name)
 
-        layer = Concatenate(name=name + 'concat')([flatten_map, states_proc])
+        if states_proc is not None:
+            layer = Concatenate(name=name + 'concat')([flatten_map, states_proc])
+        else:
+            layer = Concatenate(name=name + 'concat')([flatten_map])
+
         for k in range(self.params.hidden_layer_num):
-            layer = Dense(self.params.hidden_layer_size, activation='relu', name=name + 'hidden_layer_all_' + str(k))(
-                layer)
+            hidden_layer_size = self.params.hidden_layer_size
+            layer = Dense(hidden_layer_size, activation='relu', name=name + 'hidden_layer_all_' + str(k))(layer)
         output = Dense(self.num_actions, activation='linear', name=name + 'output_layer')(layer)
 
         model = Model(inputs=inputs, outputs=output)
@@ -181,10 +208,12 @@ class DDQNAgent(object):
             return flatten_map
 
     def act(self, state):
-        return self.get_soft_max_exploration(state)
+        # return self.get_soft_max_exploration(state)
+        return self.get_action_probabilities(state)
 
     def get_random_action(self):
-        return np.random.randint(0, self.num_actions)
+        # return np.random.randint(0, self.num_actions)
+        return np.random.rand(3, self.num_actions)
 
     def get_exploitation_action(self, state):
 
@@ -195,20 +224,32 @@ class DDQNAgent(object):
         return self.exploit_model([boolean_map_in, float_map_in, scalars]).numpy()[0]
 
     def get_soft_max_exploration(self, state):
-
-        boolean_map_in = state.get_boolean_map()[tf.newaxis, ...]
-        float_map_in = state.get_float_map()[tf.newaxis, ...]
-        scalars = np.array(state.get_scalars(), dtype=np.single)[tf.newaxis, ...]
-        p = self.soft_explore_model([boolean_map_in, float_map_in, scalars]).numpy()[0]
+        p = self.get_action_probabilities(state)
         return np.random.choice(range(self.num_actions), size=1, p=p)
 
+    def get_action_probabilities(self, state):
+        for i in range(len(state)):
+            boolean_map, float_map, _ = self.get_network_inputs_from_state(state[i])
+            new_p = self.soft_explore_model([float_map[tf.newaxis, ...], boolean_map[tf.newaxis, ...]]).numpy()[0]
+            if i == 0:
+                p = new_p
+            elif i == 1:
+                p = tf.stack([p, new_p])
+            else:
+                p = tf.concat([p, new_p[tf.newaxis, ...]], axis=0)
+        return p
+
     def get_exploitation_action_target(self, state):
-
-        boolean_map_in = state.get_boolean_map()[tf.newaxis, ...]
-        float_map_in = state.get_float_map()[tf.newaxis, ...]
-        scalars = np.array(state.get_scalars(), dtype=np.single)[tf.newaxis, ...]
-
-        return self.exploit_model_target([boolean_map_in, float_map_in, scalars]).numpy()[0]
+        for i in range(len(state)):
+            boolean_map, float_map, _ = self.get_network_inputs_from_state(state[i])
+            new_a = self.exploit_model_target([float_map[tf.newaxis, ...], boolean_map[tf.newaxis, ...]]).numpy()[0]
+            if i == 0:
+                a = new_a
+            elif i == 1:
+                a = tf.stack([a, new_a])
+            else:
+                a = tf.concat([a, new_a[tf.newaxis, ...]], axis=0)
+        return a
 
     def hard_update(self):
         self.target_network.set_weights(self.q_network.get_weights())
@@ -219,25 +260,54 @@ class DDQNAgent(object):
         self.target_network.set_weights(
             [w_new * alpha + w_old * (1. - alpha) for w_new, w_old in zip(weights, target_weights)])
 
+    def get_network_inputs_from_state(self, state):
+        if self.obs_mode == "image":
+            boolean_map = tf.expand_dims(state[:, :, 0], axis=2)
+            for i in range(1, self.boolean_map_shape[2] + 1):
+                if i != 5:
+                    boolean_map = tf.concat([boolean_map, tf.expand_dims(state[:, :, i], axis=2)], axis=2)
+            float_map = tf.expand_dims(state[:, :, 5], axis=2)
+            return boolean_map, float_map, None
+        else:
+            return None, None, None
+
+    def get_network_inputs_from_batch_state(self, state):
+        if self.obs_mode == "image":
+            boolean_map = tf.expand_dims(state[:, :, :, 0], axis=3)
+            for i in range(1, self.boolean_map_shape[2] + 1):
+                if i != 5:
+                    boolean_map = tf.concat([boolean_map, tf.expand_dims(state[:, :, :, i], axis=3)], axis=3)
+            float_map = tf.expand_dims(state[:, :, :, 5], axis=3)
+            return boolean_map, float_map, None
+        else:
+            return None, None, None
+
     def train(self, experiences):
-        boolean_map = experiences[0]
-        float_map = experiences[1]
-        scalars = tf.convert_to_tensor(experiences[2], dtype=tf.float32)
-        action = tf.convert_to_tensor(experiences[3], dtype=tf.int64)
-        reward = experiences[4]
-        next_boolean_map = experiences[5]
-        next_float_map = experiences[6]
-        next_scalars = tf.convert_to_tensor(experiences[7], dtype=tf.float32)
-        terminated = experiences[8]
+        state = experiences[0]
+        # action = tf.convert_to_tensor(experiences[1], dtype=tf.int64)
+        action = experiences[1]
+        reward = experiences[2]
+        next_state = experiences[3]
 
-        q_star = self.q_star_model(
-            [next_boolean_map, next_float_map, next_scalars])
+        done = experiences[4]
 
-        # Train Value network
-        with tf.GradientTape() as tape:
-            q_loss = self.q_loss_model(
-                [boolean_map, float_map, scalars, action, reward,
-                 terminated, q_star])
+        if self.obs_mode == "image":
+            boolean_map, float_map, _ = self.get_network_inputs_from_batch_state(state)
+            next_boolean_map, next_float_map, _ = self.get_network_inputs_from_batch_state(next_state)
+            q_star = self.q_star_model([next_float_map, next_boolean_map])
+
+            # Train Value network
+            with tf.GradientTape() as tape:
+                # print(f"SHAPE float_map: {float_map.shape}")
+                # print(f"SHAPE boolean_map: {boolean_map.shape}")
+                # print(f"SHAPE action: {action.shape}")
+                # print(f"SHAPE reward: {reward.shape}")
+                # print(f"SHAPE done: {done.shape}")
+                # print(f"SHAPE q_star: {q_star.shape}")
+                q_loss = self.q_loss_model([float_map, boolean_map, action, reward, done, q_star])
+        else:
+            print("\n\nERROR: Not implemented yet\n\n")
+
         q_grads = tape.gradient(q_loss, self.q_network.trainable_variables)
         self.q_optimizer.apply_gradients(zip(q_grads, self.q_network.trainable_variables))
 

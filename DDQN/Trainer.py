@@ -1,16 +1,18 @@
-from src.DDQN.Agent import DDQNAgent
-from src.DDQN.ReplayMemory import ReplayMemory
+from DDQN.Agent import DDQNAgent
+from DDQN.ReplayMemory import ReplayMemory
 import tqdm
-
+import numpy as np
 
 class DDQNTrainerParams:
     def __init__(self):
         self.batch_size = 128
-        self.num_steps = 1e6
+        self.num_steps = 100#1e6
+        self.num_steps_memory = 1000
+        self.num_episodes = 1000#1e5
         self.rm_pre_fill_ratio = 0.5
         self.rm_pre_fill_random = True
         self.eval_period = 5
-        self.rm_size = 50000
+        self.rm_size = 100000
         self.load_model = ""
 
 
@@ -26,16 +28,9 @@ class DDQNTrainer:
 
         self.prefill_bar = None
 
-    def add_experience(self, state, action, reward, next_state):
-        self.replay_memory.store((state.get_boolean_map(),
-                                  state.get_float_map(),
-                                  state.get_scalars(),
-                                  action,
-                                  reward,
-                                  next_state.get_boolean_map(),
-                                  next_state.get_float_map(),
-                                  next_state.get_scalars(),
-                                  next_state.terminal))
+    def add_experience(self, state, action, reward, next_state, done):
+        for i in range(np.shape(state)[0]):
+            self.replay_memory.store((state[i], action[i], np.float64(reward[i]), next_state[i], done[i]))
 
     def train_agent(self):
         if self.params.batch_size > self.replay_memory.get_size():
@@ -53,7 +48,7 @@ class DDQNTrainer:
             return False
 
         if self.prefill_bar is None:
-            print("Filling replay memory")
+            #print("Filling replay memory")
             self.prefill_bar = tqdm.tqdm(total=target_size)
 
         self.prefill_bar.update(self.replay_memory.get_size() - self.prefill_bar.n)
