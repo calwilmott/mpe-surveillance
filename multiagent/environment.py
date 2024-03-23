@@ -72,6 +72,13 @@ class MultiAgentEnv(gym.Env):
                 self.observation_space.append(spaces.Box(low=-np.inf, high=+np.inf, shape=(obs_dim,), dtype=np.float32))
             elif observation_mode == 'image':
                 self.observation_space.append(spaces.Box(low=0, high=1, shape=observation_shape, dtype=np.float32))            
+            elif observation_mode == 'hybrid':
+                obs_space_dict = {
+                    "image": spaces.Box(low=0, high=1, shape=observation_shape, dtype=np.float32),
+                    "dense": spaces.Box(low=-np.inf, high=+np.inf, shape=(obs_dim,), dtype=np.float32)
+                }
+                self.observation_space.append(spaces.Dict(obs_space_dict))           
+
             else:
                 raise ValueError(f"Unknown observation mode: {observation_mode}")
             print(self.observation_space)
@@ -98,10 +105,10 @@ class MultiAgentEnv(gym.Env):
         self.world.step()
         # record observation for each agent
         for agent in self.agents:
-            obs_n.append(self._get_obs(agent))
             reward_n.append(self._get_reward(agent))
             done_n.append(self._get_done(agent))
-
+            # I believe obs should be gathered after _get_reward is called, since get reward
+            obs_n.append(self._get_obs(agent))
             info_n['n'].append(self._get_info(agent))
 
         
@@ -119,9 +126,12 @@ class MultiAgentEnv(gym.Env):
         self._reset_render()
         # record observations for each agent
         obs_n = []
+        reward_n = []
+
         self.agents = self.world.policy_agents
         for agent in self.agents:
             obs_n.append(self._get_obs(agent))
+            reward_n.append(self._get_reward(agent))
         return obs_n
 
     # get info used for benchmarking
@@ -271,31 +281,7 @@ class MultiAgentEnv(gym.Env):
                 for line in self.agent_direction_lines:  # Add lines separately
                     viewer.add_geom(line)
 
-        results = []
-        for i in range(len(self.viewers)):
-            from multiagent import rendering
-            # update bounds to center around agent
-            cam_range = 1
-            if self.shared_viewer:
-                pos = np.zeros(self.world.dim_p)
-            else:
-                pos = self.agents[i].state.p_pos
-            self.viewers[i].set_bounds(pos[0]-cam_range,pos[0]+cam_range,pos[1]-cam_range,pos[1]+cam_range)
-            # update geometry positions
-            line_index = 0
-            for e, entity in enumerate(self.world.entities):
-                if 'obstacle' in entity.name:
-                    continue
-                self.render_geoms_xform[e].set_translation(*entity.state.p_pos)
-                
-                if 'agent' in entity.name:
-                    # Update the rotation of the directional line for this agent
-                    line = self.agent_direction_lines[line_index]
 
-                    line.attrs[2].set_rotation(entity.state.p_angle)  # attrs[0] is the line_xform
-                    line_index += 1
-            # render to display or array
-            results.append(self.viewers[i].render(return_rgb_array = mode=='rgb_array'))
         # Check for the existence of the grid and render it if it exists
         if hasattr(self.world, 'grid'):
             max_grid_value = np.max(self.world.grid)
@@ -332,12 +318,37 @@ class MultiAgentEnv(gym.Env):
             x, y = obstacle.state.p_pos
             dx, dy = obstacle.width / 2, obstacle.height / 2
             corners = [(x-dx, y-dy), (x-dx, y+dy), (x+dx, y+dy), (x+dx, y-dy)]
-
             # Create the rectangle
             obstacle_geom = rendering.make_polygon(corners)
             obstacle_geom.set_color(*obstacle.color)  # Red color
             for viewer in self.viewers:
                 viewer.add_onetime(obstacle_geom)
+        
+        results = []
+        for i in range(len(self.viewers)):
+            from multiagent import rendering
+            # update bounds to center around agent
+            cam_range = 1
+            if self.shared_viewer:
+                pos = np.zeros(self.world.dim_p)
+            else:
+                pos = self.agents[i].state.p_pos
+            self.viewers[i].set_bounds(pos[0]-cam_range,pos[0]+cam_range,pos[1]-cam_range,pos[1]+cam_range)
+            # update geometry positions
+            line_index = 0
+            for e, entity in enumerate(self.world.entities):
+                if 'obstacle' in entity.name:
+                    continue
+                self.render_geoms_xform[e].set_translation(*entity.state.p_pos)
+                
+                if 'agent' in entity.name:
+                    # Update the rotation of the directional line for this agent
+                    line = self.agent_direction_lines[line_index]
+
+                    line.attrs[2].set_rotation(entity.state.p_angle)  # attrs[0] is the line_xform
+                    line_index += 1
+            # render to display or array
+            results.append(self.viewers[i].render(return_rgb_array = mode=='rgb_array'))
         
         return results
 
