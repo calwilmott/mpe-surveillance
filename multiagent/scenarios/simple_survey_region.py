@@ -370,8 +370,6 @@ class Scenario(BaseScenario):
             return self._get_dense_obs(agent, world)
         elif self.observation_mode == "image":
             return self._get_img_obs(agent, world)
-        elif self.observation_mode == "hybrid":
-            return self._get_hybrid_obs(agent, world)
         else:
             raise ValueError("Invalid observation mode selected. Please set this parameter to 'dense' or 'image'.")
 

@@ -15,6 +15,7 @@ class Scenario(BaseScenario):
 
     def make_world(self):
         world = World()
+        
         world.dim_c = 2
         world.collaborative = True
 
@@ -28,16 +29,19 @@ class Scenario(BaseScenario):
             agent.vision_dist = self.vision_dist
 
         # Initialize grid
+        self.grid_resolution = 10  # configurable
+        # The maximum reward of a given grid square
+        self.grid_max_reward = 1  # configurable
+        # The amount to change reward of a given grid cell after each time step
+        self.reward_delta = 0.0001 # configurable
         world.grid = np.zeros((self.grid_resolution, self.grid_resolution))
-        world.obstacles = [self._create_random_obstacle(i) for i in range(self.num_obstacles)]
-        world.obstacle_mask = self._create_obstacle_mask(world)
-        world.reward_mask = self._create_reward_mask()
-
+        world.obstacles = [self.create_random_obstacle(i) for i in range(self.num_obstacles)]
+        world.obstacle_mask = self.create_obstacle_mask(world)
         # make initial conditions
         self.reset_world(world)
         return world
     
-    def _create_random_obstacle(self, i):
+    def create_random_obstacle(self, i):
         obstacle = Obstacle()
         obstacle.name = 'obstacle {}'.format(i)
         obstacle.collide = True
@@ -83,7 +87,7 @@ class Scenario(BaseScenario):
         obstacle.mask = obstacle_mask
 
         return obstacle
-    def _create_reward_mask(self, zeros_count=10):
+    def create_reward_mask(self, zeros_count=10):
         # Initialize the reward mask with ones
         reward_mask = np.ones((self.grid_resolution, self.grid_resolution))
         
@@ -96,7 +100,7 @@ class Scenario(BaseScenario):
             reward_mask[x, y] = 0
         
         return reward_mask
-    def _create_obstacle_mask(self, world):
+    def create_obstacle_mask(self, world):
         # Initialize the grid mask with ones
         obstacle_mask = np.ones((self.grid_resolution, self.grid_resolution))
 
@@ -106,14 +110,21 @@ class Scenario(BaseScenario):
 
         return obstacle_mask
     def reset_world(self, world):
-        # random properties for agents
-        world.grid = np.zeros((self.grid_resolution, self.grid_resolution))
+        # Random properties for agents
         for i, agent in enumerate(world.agents):
             agent.color = np.array([0.35, 0.35, 0.85])
             # Initialize agent position
             self.initialize_agent_position(agent, world)
         
-        # random properties for landmarks
+        # Reset obstacles
+        world.obstacles = [self.create_random_obstacle(i) for i in range(self.num_obstacles)]
+        world.obstacle_mask = self.create_obstacle_mask(world)
+
+        # Reset grid and reward mask
+        world.grid = np.zeros((self.grid_resolution, self.grid_resolution))
+        world.reward_mask = self.create_reward_mask()
+
+        # Random properties for landmarks
         for i, landmark in enumerate(world.landmarks):
             landmark.color = np.array([0.25, 0.25, 0.25])
             # Random position for landmarks
@@ -218,7 +229,35 @@ class Scenario(BaseScenario):
 
         return (left_bound <= ax <= right_bound) and (bottom_bound <= ay <= top_bound)
     
+    def _pos_to_grid(self, pos):
+        """
+        Converts a position in the environment to a grid coordinate.
+        """
+        grid_x = int((pos[0] + 1) / 2 * self.grid_resolution)
+        grid_y = int((pos[1] + 1) / 2 * self.grid_resolution)
+        return grid_x, grid_y
+    
     def _get_img_obs(self, agent, world):
+        """
+        Generates an image observation for the given agent in the world.
+        
+        The image observation is a DxDx7 NumPy array, where D is the grid resolution.
+        Each channel of the array represents different aspects of the agent's local environment:
+            - Channel 0: Agent's position (1 at the agent's location, 0 elsewhere).
+            - Channel 1: Agent's field of vision (1 for grid cells in the line of sight, 0 elsewhere).
+            - Channel 2: Other agents' positions (1 at the location of other agents, 0 elsewhere).
+            - Channel 3: Reserved for the field of vision of other agents (1 for grid cells in the line of sight, 0 elsewhere).
+            - Channel 4: Obstacle mask (1 for grid cells without obstacles, 0 for cells with obstacles).
+            - Channel 5: Reward values (values of the grid cells in the agent's vicinity).
+            - Channel 6: Reward mask (1 for grid cells currently rewarding, 0 otherwise).
+        
+        Parameters:
+            agent: The agent for which to generate the observation.
+            world: The world in which the agent resides.
+        
+        Returns:
+            A DxDx7 NumPy array representing the image observation.
+        """
         # Initialize the observation grid with zeros
         obs_grid = np.zeros((self.grid_resolution, self.grid_resolution, 7))
 
@@ -228,12 +267,15 @@ class Scenario(BaseScenario):
         agent_y = min(agent_y, self.grid_resolution - 1)  # Ensure agent_y is within bounds
         obs_grid[agent_x, agent_y, 0] = 1
 
-        # Set the agent's field of vision channel
-        for x in range(max(0, agent_x - int(agent.vision_dist * self.grid_resolution / 2)),
-                    min(self.grid_resolution, agent_x + int(agent.vision_dist * self.grid_resolution / 2) + 1)):
-            for y in range(max(0, agent_y - int(agent.vision_dist * self.grid_resolution / 2)),
-                        min(self.grid_resolution, agent_y + int(agent.vision_dist * self.grid_resolution / 2) + 1)):
-                obs_grid[x, y, 1] = 1
+        # Calculate start and end points in grid coordinates for the agent's field of vision
+        end_x = get_grid_coord(agent.state.p_pos[0] + agent.vision_dist * np.cos(agent.state.p_angle), self.grid_resolution)
+        end_y = get_grid_coord(agent.state.p_pos[1] + agent.vision_dist * np.sin(agent.state.p_angle), self.grid_resolution)
+
+        # Use Bresenham's algorithm to accurately determine the line of sight
+        line_points = get_line_bresenham((agent_x, agent_y), (end_x, end_y))
+        for (x, y) in line_points:
+            if 0 <= x < self.grid_resolution and 0 <= y < self.grid_resolution:
+                obs_grid[x, y, 1] = 1  # Set the agent's field of vision channel
 
         # Set the other agents' positions and fields of vision channels
         for other in world.agents:
@@ -242,11 +284,15 @@ class Scenario(BaseScenario):
                 other_x = min(other_x, self.grid_resolution - 1)  # Ensure other_x is within bounds
                 other_y = min(other_y, self.grid_resolution - 1)  # Ensure other_y is within bounds
                 obs_grid[other_x, other_y, 2] = 1
-                for x in range(max(0, other_x - int(other.vision_dist * self.grid_resolution / 2)),
-                            min(self.grid_resolution, other_x + int(other.vision_dist * self.grid_resolution / 2) + 1)):
-                    for y in range(max(0, other_y - int(other.vision_dist * self.grid_resolution / 2)),
-                                min(self.grid_resolution, other_y + int(other.vision_dist * self.grid_resolution / 2) + 1)):
-                        obs_grid[x, y, 3] = 1
+
+                # Calculate the field of vision for other agents
+                other_end_x = get_grid_coord(other.state.p_pos[0] + other.vision_dist * np.cos(other.state.p_angle), self.grid_resolution)
+                other_end_y = get_grid_coord(other.state.p_pos[1] + other.vision_dist * np.sin(other.state.p_angle), self.grid_resolution)
+                other_line_points = get_line_bresenham((other_x, other_y), (other_end_x, other_end_y))
+                for (x, y) in other_line_points:
+                    if 0 <= x < self.grid_resolution and 0 <= y < self.grid_resolution:
+                        obs_grid[x, y, 3] = 1  # Set the field of vision for other agents
+
 
         # Set the obstacles channel
         obs_grid[:, :, 4] = 1 - world.obstacle_mask
@@ -256,33 +302,86 @@ class Scenario(BaseScenario):
 
         # Set the reward mask channel
         obs_grid[:, :, 6] = world.reward_mask
-
+        # print("OBSTACLE MASK: ", obs_grid[:, :, 4])
+        # print("REWARD AVAILABLE: ", obs_grid[:, :, 5])
+        # print("REWARD MASK: ", obs_grid[:, :, 6])
         return obs_grid
 
-
-
-    def _pos_to_grid(self, pos):
+    def _get_hybrid_obs(self, agent, world):
         """
-        Converts a position in the environment to a grid coordinate.
+        Generates a hybrid observation for the given agent in the world.
+        
+        The hybrid observation is a dictionary containing two keys: "image" and "dense".
+        
+        "image": A DxDx3 NumPy array representing the local environment around the agent, where D is the grid resolution.
+            - The first channel (DxDx1) is the obstacle mask, where each cell indicates the presence (1) or absence (0) of an obstacle.
+            - The second channel (DxDx1) is the grid values, representing the reward values of each grid cell in the agent's vicinity.
+            - The third channel (DxDx1) is the reward mask, indicating grid cells that are currently rewarding (1) or not (0).
+            
+        "dense": A 1D NumPy array containing additional information about the agent and its environment.
+            - The first elements are the agent's velocity (2D vector).
+            - The next elements are the agent's position (2D vector).
+            - The next element is the agent's orientation angle.
+            - The next element is the agent's angular velocity.
+            - The remaining elements are the positions of other entities (landmarks, other agents) relative to the agent.
+        
+        Parameters:
+            agent: The agent for which to generate the observation.
+            world: The world in which the agent resides.
+        
+        Returns:
+            A dictionary containing the "image" and "dense" observations.
         """
-        grid_x = int((pos[0] + 1) / 2 * self.grid_resolution)
-        grid_y = int((pos[1] + 1) / 2 * self.grid_resolution)
-        return grid_x, grid_y
+        # Get image observation
+        img_obs = self._get_img_obs(agent, world)[:, :, 4:]
+
+        # Get dense observation
+        dense_obs = self._get_dense_obs(agent, world)
+
+        # Combine into a hybrid observation
+        hybrid_obs = {
+            "image": img_obs,
+            "dense": dense_obs
+        }
+
+        return hybrid_obs
+
 
     def _get_dense_obs(self, agent, world):
-        # get positions of all entities in this agent's reference frame
+        """
+        WARNING: This observation does not contain information about rewards or obstacles,
+        which may be necessary for training a performant agent.
+
+        Generates a dense observation for the given agent in the world.
+        
+        The dense observation is a 1D NumPy array containing various features:
+            - Agent's velocity (2D vector)
+            - Agent's position (2D vector)
+            - Agent's angle (1D scalar)
+            - Agent's angular velocity (1D scalar)
+            - Relative positions of all landmarks (2D vectors for each landmark)
+            - Relative positions of all other agents (2D vectors for each other agent)
+        
+        Parameters:
+            agent: The agent for which to generate the observation.
+            world: The world in which the agent resides.
+        
+        Returns:
+            A 1D NumPy array representing the dense observation.
+        """
+        # Get positions of all entities in this agent's reference frame
         entity_pos = []
-        for entity in world.landmarks:  # world.entities:
+        for entity in world.landmarks:
             entity_pos.append(entity.state.p_pos - agent.state.p_pos)
-        # entity colors
-        entity_color = []
-        for entity in world.landmarks:  # world.entities:
-            entity_color.append(entity.color)
-        # communication of all other agents
+
+        # Get positions of all other agents
         other_pos = []
         for other in world.agents:
-            if other is agent: continue
+            if other is agent:
+                continue
             other_pos.append(other.state.p_pos - agent.state.p_pos)
+
+        # Concatenate all features to form the dense observation
         return np.concatenate([agent.state.p_vel] + [agent.state.p_pos] + [agent.state.p_angle] + [agent.state.p_angle_vel] + entity_pos + other_pos)
 
 
@@ -291,9 +390,10 @@ class Scenario(BaseScenario):
             return self._get_dense_obs(agent, world)
         elif self.observation_mode == "image":
             return self._get_img_obs(agent, world)
+        elif self.observation_mode == "hybrid":
+            return self._get_hybrid_obs(agent, world)
         else:
             raise ValueError("Invalid observation mode selected. Please set this parameter to 'dense' or 'image'.")
-
 
 
 

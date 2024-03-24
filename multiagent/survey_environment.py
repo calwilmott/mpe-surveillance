@@ -1,6 +1,6 @@
 
 from multiagent.environment import MultiAgentEnv
-from multiagent.scenarios.simple_survey_region import SurveyScenario
+from multiagent.scenarios.survey_region_maddpg import Scenario
 
 class SurveyEnv(MultiAgentEnv):
     def __init__(self, num_obstacles: int = 4, num_agents: int = 3, vision_dist: float = 0.5, grid_resolution: int = 10, grid_max_reward: float = 1.0, reward_delta: float = 0.0001, observation_mode: str = "image"):
@@ -21,7 +21,7 @@ class SurveyEnv(MultiAgentEnv):
             None
         """
         # Load the scenario with the specified parameters
-        self.scenario = SurveyScenario(num_obstacles, num_agents, vision_dist, grid_resolution, grid_max_reward, reward_delta, observation_mode)
+        self.scenario = Scenario(num_obstacles, num_agents, vision_dist, grid_resolution, grid_max_reward, reward_delta, observation_mode)
         # Create the world
 
         world = self.scenario.make_world()
