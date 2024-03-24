@@ -14,7 +14,8 @@ class SurveyEnv(MultiAgentEnv):
             grid_resolution (int): The resolution of the grid used to represent the environment. A higher resolution means a finer grid with more cells.
             grid_max_reward (float): The maximum reward value that a grid cell can have. This value is used to initialize the reward distribution in the environment, and to cap reward from increasing indefinitely.
             reward_delta (float): The amount by which the reward of a grid cell increases after each time step. This can be used to control the frequency with which an optimal policy would dictate than an agent should re-visit a grid square.
-            observation_mode (str): The mode of observation for the agents. This can determine how agents perceive their environment, e.g., as raw pixel values ("image") or as processed features ("dense").
+            observation_mode (str): The mode of observation for the agents. This can determine how agents perceive their environment, e.g., as raw pixel values ("image") or as processed features ("dense"). 
+                                    Select the "hybrid" mode for a combination of both feature representations.
 
         Returns:
             None
@@ -22,6 +23,12 @@ class SurveyEnv(MultiAgentEnv):
         # Load the scenario with the specified parameters
         self.scenario = SurveyScenario(num_obstacles, num_agents, vision_dist, grid_resolution, grid_max_reward, reward_delta, observation_mode)
         # Create the world
+
         world = self.scenario.make_world()
+        
+        if observation_mode == "image":
+            observation_shape = self.scenario._get_img_obs(world.agents[0], world).shape
+        else:
+            observation_shape = self.scenario._get_img_obs(world.agents[0], world)[:, :, 4:].shape
         # Initialize the parent class with the necessary functions
-        super().__init__(world, self.scenario.reset_world, self.scenario.reward, self.scenario.observation)
+        super().__init__(world, self.scenario.reset_world, self.scenario.reward, self.scenario.observation, observation_mode=observation_mode, observation_shape=observation_shape)
