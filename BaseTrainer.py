@@ -41,11 +41,11 @@ class BaseTrainer:
             self.step_count = 0
             state = self.env.reset()
             while True:
-                self.step(state, random=self.trainer.params.rm_pre_fill_random)
+                self.step(state, random=self.trainer.params.rm_pre_fill_random, is_filling_memory=True)
                 if self.step_count >= self.trainer.params.num_steps_memory:
                     break
 
-    def step(self, state, random=False):
+    def step(self, state, random=False, is_filling_memory=False):
         finished = False
         if random:
             action = self.agent.get_random_action()
@@ -57,9 +57,9 @@ class BaseTrainer:
         if self.step_count >= self.trainer.params.num_steps:
             finished = True
 
-        if self.is_render:
+        if self.is_render and not is_filling_memory:
             self.env.render()
-            time.sleep(0.001)
+            time.sleep(0.0001)
 
         return copy.deepcopy(next_state), reward, finished
 
