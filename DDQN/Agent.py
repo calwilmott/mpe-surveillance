@@ -31,9 +31,9 @@ class DDQNAgentParams:
         self.soft_max_scaling = 0.1
 
         # Global-Local Map
-        self.use_global_local = False
-        self.global_map_scaling = 1  # Original: 3
-        self.local_map_size = 6  # Original: 17
+        self.use_global_local = True
+        self.global_map_scaling = 3  # Original: 3
+        self.local_map_size = 17  # Original: 17
 
         # Printing
         self.print_summary = False
@@ -52,13 +52,23 @@ class DDQNAgent(object):
             self.boolean_map_shape = (grid_dim, grid_dim, np.shape(example_state)[2] - 1)
             self.float_map_shape = (grid_dim, grid_dim, 1)
             self.scalars = None
+        elif self.obs_mode == "hybrid":
+            image_obs = example_state["image"]
+            grid_dim = np.shape(image_obs)[0]
+            self.boolean_map_shape = (grid_dim, grid_dim, np.shape(image_obs)[2] - 1)
+            self.float_map_shape = (grid_dim, grid_dim, 1)
+            dense_obs = example_state["dense"]
+            self.scalars = np.shape(dense_obs)[0]
         else:
             self.boolean_map_shape = example_state.get_boolean_map_shape()
             self.float_map_shape = example_state.get_float_map_shape()
             self.scalars = example_state.get_num_scalars()
 
         self.num_actions = action_space.n
-        self.num_map_channels = example_state[2]
+        if self.obs_mode == "hybrid":
+            self.num_map_channels = image_obs[2]
+        else:
+            self.num_map_channels = example_state[2]
 
         # Create shared inputs
         float_map_input = Input(shape=self.float_map_shape, name='float_map_input', dtype=tf.float32)
@@ -227,28 +237,40 @@ class DDQNAgent(object):
         p = self.get_action_probabilities(state)
         return np.random.choice(range(self.num_actions), size=1, p=p)
 
+    def _stack_along(self, previous, new, iteration):
+        if iteration == 0:
+            return new
+        elif iteration == 1:
+            return tf.stack([previous, new])
+        else:
+            return tf.concat([previous, new[tf.newaxis, ...]], axis=0)
+
     def get_action_probabilities(self, state):
+        p = None
         for i in range(len(state)):
-            boolean_map, float_map, _ = self.get_network_inputs_from_state(state[i])
-            new_p = self.soft_explore_model([float_map[tf.newaxis, ...], boolean_map[tf.newaxis, ...]]).numpy()[0]
-            if i == 0:
-                p = new_p
-            elif i == 1:
-                p = tf.stack([p, new_p])
+            if self.obs_mode == "hybrid":
+                boolean_map, float_map, scalars = self.get_network_inputs_from_state(state[i])
+                new_p = self.soft_explore_model(
+                    [float_map[tf.newaxis, ...], boolean_map[tf.newaxis, ...], scalars[tf.newaxis, ...]]
+                ).numpy()[0]
             else:
-                p = tf.concat([p, new_p[tf.newaxis, ...]], axis=0)
+                boolean_map, float_map, _ = self.get_network_inputs_from_state(state[i])
+                new_p = self.soft_explore_model([float_map[tf.newaxis, ...], boolean_map[tf.newaxis, ...]]).numpy()[0]
+            p = self._stack_along(p, new_p, i)
         return p
 
     def get_exploitation_action_target(self, state):
+        a = None
         for i in range(len(state)):
-            boolean_map, float_map, _ = self.get_network_inputs_from_state(state[i])
-            new_a = self.exploit_model_target([float_map[tf.newaxis, ...], boolean_map[tf.newaxis, ...]]).numpy()[0]
-            if i == 0:
-                a = new_a
-            elif i == 1:
-                a = tf.stack([a, new_a])
+            if self.obs_mode == "hybrid":
+                boolean_map, float_map, scalars = self.get_network_inputs_from_state(state[i])
+                new_a = self.exploit_model_target(
+                    [float_map[tf.newaxis, ...], boolean_map[tf.newaxis, ...], scalars[tf.newaxis, ...]]
+                ).numpy()[0]
             else:
-                a = tf.concat([a, new_a[tf.newaxis, ...]], axis=0)
+                boolean_map, float_map, _ = self.get_network_inputs_from_state(state[i])
+                new_a = self.exploit_model_target([float_map[tf.newaxis, ...], boolean_map[tf.newaxis, ...]]).numpy()[0]
+            a = self._stack_along(a, new_a, i)
         return a
 
     def hard_update(self):
@@ -268,8 +290,23 @@ class DDQNAgent(object):
                     boolean_map = tf.concat([boolean_map, tf.expand_dims(state[:, :, i], axis=2)], axis=2)
             float_map = tf.expand_dims(state[:, :, 5], axis=2)
             return boolean_map, float_map, None
+        elif self.obs_mode == "hybrid":
+            image_obs = state["image"]
+            dense_obs = state["dense"]
+            boolean_map = tf.expand_dims(image_obs[:, :, 0], axis=2)
+            for i in range(2, self.boolean_map_shape[2] + 1):
+                boolean_map = tf.concat([boolean_map, tf.expand_dims(image_obs[:, :, i], axis=2)], axis=2)
+            float_map = tf.expand_dims(image_obs[:, :, 1], axis=2)
+            return boolean_map, float_map, dense_obs
         else:
             return None, None, None
+
+    def _extract_dicts_from_batch(self, batch, key1, key2):
+        key1_batch, key2_batch = [], []
+        for item in batch:
+            key1_batch.append(item[key1])
+            key2_batch.append(item[key2])
+        return np.array(key1_batch), np.array(key2_batch)
 
     def get_network_inputs_from_batch_state(self, state):
         if self.obs_mode == "image":
@@ -279,32 +316,33 @@ class DDQNAgent(object):
                     boolean_map = tf.concat([boolean_map, tf.expand_dims(state[:, :, :, i], axis=3)], axis=3)
             float_map = tf.expand_dims(state[:, :, :, 5], axis=3)
             return boolean_map, float_map, None
+        elif self.obs_mode == "hybrid":
+            image_obs, dense_obs = self._extract_dicts_from_batch(state, "image", "dense")
+            boolean_map = tf.expand_dims(image_obs[:, :, :, 0], axis=3)
+            for i in range(2, self.boolean_map_shape[2] + 1):
+                boolean_map = tf.concat([boolean_map, tf.expand_dims(image_obs[:, :, :, i], axis=3)], axis=3)
+            float_map = tf.expand_dims(image_obs[:, :, :, 1], axis=3)
+            return boolean_map, float_map, dense_obs
         else:
             return None, None, None
 
     def train(self, experiences):
-        state = experiences[0]
-        # action = tf.convert_to_tensor(experiences[1], dtype=tf.int64)
-        action = experiences[1]
-        reward = experiences[2]
-        next_state = experiences[3]
-
-        done = experiences[4]
+        state, action, reward, next_state, done = experiences
 
         if self.obs_mode == "image":
             boolean_map, float_map, _ = self.get_network_inputs_from_batch_state(state)
             next_boolean_map, next_float_map, _ = self.get_network_inputs_from_batch_state(next_state)
             q_star = self.q_star_model([next_float_map, next_boolean_map])
 
-            # Train Value network
             with tf.GradientTape() as tape:
-                # print(f"SHAPE float_map: {float_map.shape}")
-                # print(f"SHAPE boolean_map: {boolean_map.shape}")
-                # print(f"SHAPE action: {action.shape}")
-                # print(f"SHAPE reward: {reward.shape}")
-                # print(f"SHAPE done: {done.shape}")
-                # print(f"SHAPE q_star: {q_star.shape}")
                 q_loss = self.q_loss_model([float_map, boolean_map, action, reward, done, q_star])
+        elif self.obs_mode == "hybrid":
+            boolean_map, float_map, scalars = self.get_network_inputs_from_batch_state(state)
+            next_boolean_map, next_float_map, next_scalars = self.get_network_inputs_from_batch_state(next_state)
+            q_star = self.q_star_model([next_float_map, next_boolean_map, next_scalars])
+
+            with tf.GradientTape() as tape:
+                q_loss = self.q_loss_model([float_map, boolean_map, scalars, action, reward, done, q_star])
         else:
             print("\n\nERROR: Not implemented yet\n\n")
 

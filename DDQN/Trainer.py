@@ -12,7 +12,7 @@ class DDQNTrainerParams:
         self.rm_pre_fill_ratio = 0.5
         self.rm_pre_fill_random = True
         self.eval_period = 5
-        self.rm_size = 100000
+        self.rm_size = 1000000
         self.load_model = ""
 
 
