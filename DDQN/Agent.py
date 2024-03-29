@@ -32,8 +32,8 @@ class DDQNAgentParams:
 
         # Global-Local Map
         self.use_global_local = True
-        self.global_map_scaling = 3  # Original: 3
-        self.local_map_size = 17  # Original: 17
+        self.global_map_scaling = 3
+        self.local_map_size = 17
 
         # Printing
         self.print_summary = False
