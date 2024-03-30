@@ -28,6 +28,8 @@ class SurveyEnv(MultiAgentEnv):
         
         if observation_mode == "image":
             observation_shape = self.scenario._get_img_obs(world.agents[0], world).shape
+        elif observation_mode == "upscaled_image":
+            observation_shape = self.scenario._get_upscaled_img_obs(world.agents[0], world).shape
         else:
             observation_shape = self.scenario._get_img_obs(world.agents[0], world)[:, :, 4:].shape
         # Initialize the parent class with the necessary functions
