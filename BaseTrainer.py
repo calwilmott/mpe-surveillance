@@ -91,7 +91,7 @@ class BaseTrainer:
         agent.save_weights(self.run_path + "weights")
 
     def log_best_run(self, rewards, iter):
-        best_run_path = self.run_path + "/best.png"
+        best_run_path = self.run_path + "best.png"
         if os.path.exists(best_run_path):
             shutil.rmtree(best_run_path)
 

@@ -6,14 +6,14 @@ import numpy as np
 class DDQNTrainerParams:
     def __init__(self):
         self.batch_size = 128
-        self.num_steps = 1e5
+        self.num_steps = 1e4
         self.num_steps_memory = 20000
         self.num_episodes = 1e6
         self.save_interval = min(10000, int(self.num_episodes) // 5)
-        self.rm_pre_fill_ratio = 0.6
+        self.rm_pre_fill_ratio = 0.5
         self.rm_pre_fill_random = True
         self.eval_period = 5
-        self.rm_size = 500000
+        self.rm_size = 100000
         self.load_model = ""
 
 
