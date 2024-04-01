@@ -236,6 +236,35 @@ class Scenario(BaseScenario):
         grid_y = int((pos[1] + 1) / 2 * self.grid_resolution)
         return grid_x, grid_y
     
+    def _get_upscaled_img_obs(self, agent, world):
+        # Initialize the observation grid with zeros
+        obs_grid = np.zeros((3 * self.grid_resolution, 3 * self.grid_resolution, 3))
+
+        # Set the agent's position channel
+        agent_x_idx = get_grid_coord(agent.state.p_pos[0], 3 * self.grid_resolution)
+        agent_y_idx = get_grid_coord(agent.state.p_pos[1], 3 * self.grid_resolution)
+        print("AGENT IDX: ", agent_x_idx, agent_y_idx)
+        agent_x_idx = min(agent_x_idx, 3* self.grid_resolution - 1)  # Ensure agent_x is within bounds
+        agent_y_idx = min(agent_y_idx, 3* self.grid_resolution - 1)  # Ensure agent_y is within bounds
+        obs_grid[agent_x_idx, agent_y_idx, 0] = 1
+
+        # Set the obstacles channel
+        obs_channel = 1 - world.obstacle_mask
+        obs_channel = upsample_channel(obs_channel, target_size=[3 * self.grid_resolution, 3 * self.grid_resolution])
+        
+        # Modify the corners of each 3x3 cell to be obstacles
+        for i in range(0, obs_channel.shape[0], 3):
+            for j in range(0, obs_channel.shape[1], 3):
+                obs_channel[i, j] = obs_channel[i, j + 2] = obs_channel[i + 2, j] = obs_channel[i + 2, j + 2] = 1
+
+        obs_grid[:, :, 1] = obs_channel
+
+        # Set the reward values channel
+        obs_channel = world.grid
+        obs_channel = upsample_channel(obs_channel, target_size=[3 * self.grid_resolution, 3 * self.grid_resolution])
+        obs_grid[:, :, 2] = obs_channel
+        return obs_grid
+    
     def _get_img_obs(self, agent, world):
         """
         Generates an image observation for the given agent in the world.
