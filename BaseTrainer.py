@@ -40,6 +40,7 @@ class BaseTrainer:
                 path = f"runs/run{i}/"
                 if not os.path.exists(path):
                     os.mkdir(path)
+                    print(f"\n---\nSTARTING RUN {i}\n---\n")
                     return path
                 i += 1
 
