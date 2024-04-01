@@ -5,6 +5,7 @@ import copy
 import os
 import pickle
 import shutil
+import gc
 import tensorflow as tf
 import matplotlib.pyplot as plt
 from DDQN.Agent import DDQNAgent, DDQNAgentParams
@@ -64,14 +65,17 @@ class BaseTrainer:
         last_ep = 0
         best_avg_ep_reward = 0
         best_run = None
+        gc.collect()
         while self.episode_count < self.trainer.params.num_episodes:
             bar.update(self.episode_count - last_ep)
             last_ep = self.episode_count
-            avg_ep_reward, sum_ep_reward, final_step_reward, ep_step_rewards = self.train_episode()
+            ep_step_rewards = self.train_episode()
+            avg_ep_reward = np.average(ep_step_rewards)
             with self.writer.as_default():
                 tf.summary.scalar("average", avg_ep_reward, step=self.episode_count)
-                tf.summary.scalar("sum", sum_ep_reward, step=self.episode_count)
-                tf.summary.scalar("final_step", final_step_reward, step=self.episode_count)
+                tf.summary.scalar("sum", sum(ep_step_rewards), step=self.episode_count)
+                tf.summary.scalar("max", np.max(ep_step_rewards), step=self.episode_count)
+                tf.summary.scalar("final_step", ep_step_rewards[-1], step=self.episode_count)
 
             if avg_ep_reward > best_avg_ep_reward:
                 best_avg_ep_reward = avg_ep_reward
@@ -140,8 +144,5 @@ class BaseTrainer:
             self.trainer.train_agent()
 
         self.episode_count += 1
-        avg_episode_reward = np.average(ep_step_rewards)
-        sum_episode_reward = sum(ep_step_rewards)
-        final_step_reward = step_reward
 
-        return avg_episode_reward, sum_episode_reward, final_step_reward, ep_step_rewards
+        return ep_step_rewards
