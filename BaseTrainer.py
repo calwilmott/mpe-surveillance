@@ -4,7 +4,6 @@ import time
 import copy
 import os
 import pickle
-import shutil
 import gc
 import tensorflow as tf
 import matplotlib.pyplot as plt
@@ -97,7 +96,7 @@ class BaseTrainer:
     def log_best_run(self, rewards, iter):
         best_run_path = self.run_path + "best.png"
         if os.path.exists(best_run_path):
-            shutil.rmtree(best_run_path)
+            os.remove(best_run_path)
 
         plt.plot(rewards)
         plt.title(f"Best run ({iter})")
