@@ -173,47 +173,46 @@ class Scenario(BaseScenario):
         dist_min = agent1.size + agent2.size
         return True if dist < dist_min else False
 
-    def reward(self, agentt, world):
-        reward = 0
-        for agent in world.agents:
-        # Calculate start and end points in grid coordinates
-            start_x = get_grid_coord(agent.state.p_pos[0], self.grid_resolution)
-            start_y = get_grid_coord(agent.state.p_pos[1], self.grid_resolution)
-            end_x = get_grid_coord(agent.state.p_pos[0] + agent.vision_dist * np.cos(agent.state.p_angle), self.grid_resolution)
-            end_y = get_grid_coord(agent.state.p_pos[1] + agent.vision_dist * np.sin(agent.state.p_angle), self.grid_resolution)
+    def reward(self, agent, world):
+        def get_grid_coord(pos):
+            return min(int((pos + 1) / 2 * self.grid_resolution), self.grid_resolution - 1)
 
-            reward += world.grid[start_x, start_y]  # Initialize reward
-            world.grid[start_x, start_y] = 0  # Clear the agent's current square
+        # Calculate grid square based on agent position
+        grid_x = get_grid_coord(agent.state.p_pos[0])
+        grid_y = get_grid_coord(agent.state.p_pos[1])
+        grid_square = world.grid[grid_x, grid_y]
+        world.grid[grid_x, grid_y] = 0
 
-            # Use Bresenham's algorithm to accurately determine the line of sight
-            line_points = get_line_bresenham((start_x, start_y), (end_x, end_y))
+        # Calculate reward for squares in the agent's line of sight
+        angle = agent.state.p_angle
+        for dist in np.linspace(0, agent.vision_dist, num=int(agent.vision_dist * self.grid_resolution)):
+            # Calculate the coordinates along the line of sight
+            sight_x = agent.state.p_pos[0] + dist * np.cos(angle)
+            sight_y = agent.state.p_pos[1] + dist * np.sin(angle)
 
-            for (x, y) in line_points:
-                if 0 <= x < self.grid_resolution and 0 <= y < self.grid_resolution:
-                    if world.obstacle_mask[x, y] == 0:
-                        break  # Line of sight is blocked by an obstacle
+            sight_grid_x = get_grid_coord(sight_x)
+            sight_grid_y = get_grid_coord(sight_y)
 
-                    # Accumulate reward and clear the grid square
-                    reward += world.grid[x, y]
-                    world.grid[x, y] = 0
+            # Check if the line of sight is obstructed by an obstacle
+            if 0 <= sight_grid_x < self.grid_resolution and 0 <= sight_grid_y < self.grid_resolution:
+                if world.obstacle_mask[sight_grid_x, sight_grid_y] == 0:
+                    # Line of sight is blocked by an obstacle
+                    break  # Stop checking further squares in this direction
 
-            # Update the reward grid for the last agent, if necessary
-            if agent == world.agents[-1]:
-                grid_update = self.reward_delta * np.ones(shape=(self.grid_resolution, self.grid_resolution))
-                world.grid += grid_update
-                world.grid = np.clip(world.grid, a_min=0, a_max=self.grid_max_reward)
-                # Don't reward for obstacle grid squares
-                world.grid *= world.obstacle_mask
-                # And, don't reward for masked grid squares
-                world.grid *= world.reward_mask
-            
-            for i in range(len(world.agents)-1):
-                for j in range(i+1, len(world.agents)):
-                    dist = np.sqrt(np.sum(np.square(world.agents[i].state.p_pos - world.agents[j].state.p_pos)))
-                    if dist < 0.2:
-                        reward -= 0.2
+                # Add grid value to reward and reset grid square
+                grid_square += world.grid[sight_grid_x, sight_grid_y]
+                world.grid[sight_grid_x, sight_grid_y] = 0
 
-        return reward
+        # Update reward grid if processing last agent
+        if agent == world.agents[-1]:
+            grid_update = self.reward_delta * np.ones(shape=(self.grid_resolution, self.grid_resolution))
+
+            world.grid += grid_update
+            world.grid = np.clip(world.grid, a_min=0, a_max=self.grid_max_reward)
+            world.grid *= world.obstacle_mask
+
+        # Return accumulated grid value as reward
+        return grid_square
 
 
     def is_collision_rectangular(self, agent, obstacle, new_pos):
