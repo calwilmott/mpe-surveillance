@@ -208,6 +208,7 @@ class Scenario(BaseScenario):
         top_bound = oy + half_height + agent_radius
 
         return (left_bound <= ax <= right_bound) and (bottom_bound <= ay <= top_bound)
+    
     def _pos_to_grid(self, pos):
         """
         Converts a position in the environment to a grid coordinate.
@@ -215,6 +216,35 @@ class Scenario(BaseScenario):
         grid_x = int((pos[0] + 1) / 2 * self.grid_resolution)
         grid_y = int((pos[1] + 1) / 2 * self.grid_resolution)
         return grid_x, grid_y
+
+    def _get_upscaled_img_obs(self, agent, world):
+        # Initialize the observation grid with zeros
+        obs_grid = np.zeros((3 * self.grid_resolution, 3 * self.grid_resolution, 3))
+
+        # Set the agent's position channel
+        agent_x_idx = get_grid_coord(agent.state.p_pos[0], 3 * self.grid_resolution)
+        agent_y_idx = get_grid_coord(agent.state.p_pos[1], 3 * self.grid_resolution)
+        print("AGENT IDX: ", agent_x_idx, agent_y_idx)
+        agent_x_idx = min(agent_x_idx, 3* self.grid_resolution - 1)  # Ensure agent_x is within bounds
+        agent_y_idx = min(agent_y_idx, 3* self.grid_resolution - 1)  # Ensure agent_y is within bounds
+        obs_grid[agent_x_idx, agent_y_idx, 0] = 1
+
+        # Set the obstacles channel
+        obs_channel = 1 - world.obstacle_mask
+        obs_channel = upsample_channel(obs_channel, target_size=[3 * self.grid_resolution, 3 * self.grid_resolution])
+        
+        # Modify the corners of each 3x3 cell to be obstacles
+        for i in range(0, obs_channel.shape[0], 3):
+            for j in range(0, obs_channel.shape[1], 3):
+                obs_channel[i, j] = obs_channel[i, j + 2] = obs_channel[i + 2, j] = obs_channel[i + 2, j + 2] = 1
+
+        obs_grid[:, :, 1] = obs_channel
+
+        # Set the reward values channel
+        obs_channel = world.grid
+        obs_channel = upsample_channel(obs_channel, target_size=[3 * self.grid_resolution, 3 * self.grid_resolution])
+        obs_grid[:, :, 2] = obs_channel
+        return obs_grid
     
     def _get_img_obs(self, agent, world):
         """
@@ -238,55 +268,67 @@ class Scenario(BaseScenario):
             A DxDx7 NumPy array representing the image observation.
         """
         # Initialize the observation grid with zeros
-        obs_grid = np.zeros((self.grid_resolution, self.grid_resolution, 7))
+        obs_grid = np.zeros((5*self.grid_resolution, 5*self.grid_resolution, 7))
 
         # Set the agent's position channel
-        agent_x, agent_y = self._pos_to_grid(agent.state.p_pos)
-        agent_x = min(agent_x, self.grid_resolution - 1)  # Ensure agent_x is within bounds
-        agent_y = min(agent_y, self.grid_resolution - 1)  # Ensure agent_y is within bounds
-        obs_grid[agent_x, agent_y, 0] = 1
-
+        pos = agent.state.p_pos
+        agent_x = (pos[0] + 1) / 2
+        agent_y = (pos[1] + 1) / 2
+        obs_grid[:,:,0] = radial_basis_obs(agent_x, agent_y, 1, dim=[5*self.grid_resolution, 5*self.grid_resolution])
+        # obs_grid[agent_x, agent_y, 0] = 1
+        # Set the agent's position channel
+        agent_x_idx  = get_grid_coord(agent.state.p_pos[0], 5*self.grid_resolution)
+        agent_y_idx = get_grid_coord(agent.state.p_pos[1], 5*self.grid_resolution)
+        agent_x_idx = min(agent_x_idx, 5*self.grid_resolution - 1)  # Ensure agent_x is within bounds
+        agent_y_idx = min(agent_y_idx, 5*self.grid_resolution - 1)  # Ensure agent_y is within bounds
         # Calculate start and end points in grid coordinates for the agent's field of vision
-        end_x = get_grid_coord(agent.state.p_pos[0] + agent.vision_dist * np.cos(agent.state.p_angle), self.grid_resolution)
-        end_y = get_grid_coord(agent.state.p_pos[1] + agent.vision_dist * np.sin(agent.state.p_angle), self.grid_resolution)
+        end_x = get_grid_coord(agent.state.p_pos[0] + agent.vision_dist * np.cos(agent.state.p_angle), 5*self.grid_resolution)
+        end_y = get_grid_coord(agent.state.p_pos[1] + agent.vision_dist * np.sin(agent.state.p_angle), 5*self.grid_resolution)
 
         # Use Bresenham's algorithm to accurately determine the line of sight
-        line_points = get_line_bresenham((agent_x, agent_y), (end_x, end_y))
+        line_points = get_line_bresenham((agent_x_idx, agent_y_idx), (end_x, end_y))
         for (x, y) in line_points:
-            if 0 <= x < self.grid_resolution and 0 <= y < self.grid_resolution:
+            if 0 <= x < 5*self.grid_resolution and 0 <= y < 5*self.grid_resolution:
                 obs_grid[x, y, 1] = 1  # Set the agent's field of vision channel
-
+        obs_grid[:, :, 1] = obs_grid[:, :, 1].T
         # Set the other agents' positions and fields of vision channels
         for other in world.agents:
-            if other is not agent:
-                other_x, other_y = self._pos_to_grid(other.state.p_pos)
-                other_x = min(other_x, self.grid_resolution - 1)  # Ensure other_x is within bounds
-                other_y = min(other_y, self.grid_resolution - 1)  # Ensure other_y is within bounds
-                obs_grid[other_x, other_y, 2] = 1
-
+            if other is not agent:                
+                pos = other.state.p_pos
+                agent_x = (pos[0] + 1) / 2
+                agent_y = (pos[1] + 1) / 2
+                obs_grid[:,:,2] = radial_basis_obs(agent_x, agent_y, 1, dim=[5*self.grid_resolution, 5*self.grid_resolution])
+                agent_x_idx  = get_grid_coord(other.state.p_pos[0], 5*self.grid_resolution)
+                agent_y_idx = get_grid_coord(other.state.p_pos[1], 5*self.grid_resolution)
+                agent_x_idx = min(agent_x_idx, self.grid_resolution - 1)  # Ensure agent_x is within bounds
+                agent_y_idx = min(agent_y_idx, self.grid_resolution - 1)  # Ensure agent_y is within bounds
                 # Calculate the field of vision for other agents
-                other_end_x = get_grid_coord(other.state.p_pos[0] + other.vision_dist * np.cos(other.state.p_angle), self.grid_resolution)
-                other_end_y = get_grid_coord(other.state.p_pos[1] + other.vision_dist * np.sin(other.state.p_angle), self.grid_resolution)
-                other_line_points = get_line_bresenham((other_x, other_y), (other_end_x, other_end_y))
+                other_end_x = get_grid_coord(other.state.p_pos[0] + other.vision_dist * np.cos(other.state.p_angle), 5*self.grid_resolution)
+                other_end_y = get_grid_coord(other.state.p_pos[1] + other.vision_dist * np.sin(other.state.p_angle), 5*self.grid_resolution)
+                other_line_points = get_line_bresenham((agent_x_idx, agent_y_idx), (other_end_x, other_end_y))
                 for (x, y) in other_line_points:
-                    if 0 <= x < self.grid_resolution and 0 <= y < self.grid_resolution:
+                    if 0 <= x < 5*self.grid_resolution and 0 <= y < 5*self.grid_resolution:
                         obs_grid[x, y, 3] = 1  # Set the field of vision for other agents
+        obs_grid[:, :, 3] = obs_grid[:, :, 3].T
 
 
         # Set the obstacles channel
-        obs_grid[:, :, 4] = 1 - world.obstacle_mask
+        obs_channel = 1 - world.obstacle_mask
+        obs_channel = upsample_channel(obs_channel, target_size=[5*self.grid_resolution, 5*self.grid_resolution])
+        obs_grid[:, :, 4] = obs_channel.T
 
         # Set the reward values channel
-        obs_grid[:, :, 5] = world.grid
-
+        rew_channel = upsample_channel(world.grid, target_size=[5*self.grid_resolution, 5*self.grid_resolution])
+        obs_grid[:, :, 5] = rew_channel.T
         # Set the reward mask channel
-        obs_grid[:, :, 6] = world.reward_mask
-        print("OBSTACLE MASK: ", obs_grid[:, :, 4])
-        print("REWARD AVAILABLE: ", obs_grid[:, :, 5])
-        print("REWARD MASK: ", obs_grid[:, :, 6])
+        rew_mask_channel = upsample_channel(world.reward_mask, target_size=[5*self.grid_resolution, 5*self.grid_resolution])
+        obs_grid[:, :, 6] = rew_mask_channel.T
+        # print("OBSTACLE MASK: ", obs_grid[:, :, 4])
+        # print("REWARD AVAILABLE: ", obs_grid[:, :, 5])
+        # print("REWARD MASK: ", obs_grid[:, :, 6])
         return obs_grid
-
-
+    
+    
     def _get_hybrid_obs(self, agent, world):
         """
         Generates a hybrid observation for the given agent in the world.

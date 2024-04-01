@@ -78,6 +78,8 @@ class MultiAgentEnv(gym.Env):
                     "dense": spaces.Box(low=-np.inf, high=+np.inf, shape=(obs_dim,), dtype=np.float32)
                 }
                 self.observation_space.append(spaces.Dict(obs_space_dict))           
+            elif observation_mode == 'upscaled_image':
+                self.observation_space.append(spaces.Box(low=0, high=1, shape=observation_shape, dtype=np.float32))            
 
             else:
                 raise ValueError("Unknown observation mode:" + observation_mode)
