@@ -6,7 +6,7 @@ import numpy as np
 from multiagent.obs_utils import radial_basis_obs, upsample_channel
 
 class SurveyScenario(BaseScenario):
-    def __init__(self, num_obstacles, num_agents, vision_dist, grid_resolution, grid_max_reward, reward_delta, observation_mode):
+    def __init__(self, num_obstacles, num_agents, vision_dist, grid_resolution, grid_max_reward, reward_delta, observation_mode, seed=None):
         self.num_obstacles = num_obstacles
         self.num_agents = num_agents
         self.vision_dist = vision_dist
@@ -14,6 +14,8 @@ class SurveyScenario(BaseScenario):
         self.grid_max_reward = grid_max_reward
         self.reward_delta = reward_delta
         self.observation_mode = observation_mode
+        self.seed = seed
+        self.original_seed = seed
 
     def make_world(self):
         world = World()
@@ -30,6 +32,7 @@ class SurveyScenario(BaseScenario):
             agent.vision_dist = self.vision_dist
 
         # Initialize grid
+        self.reset_seed()
         world.grid = np.zeros((self.grid_resolution, self.grid_resolution))
         world.obstacles = [self._create_random_obstacle(i) for i in range(self.num_obstacles)]
         world.obstacle_mask = self._create_obstacle_mask(world)
@@ -38,7 +41,19 @@ class SurveyScenario(BaseScenario):
         # make initial conditions
         self.reset_world(world)
         return world
-    
+
+    def random_seed(self):
+        if self.seed is not None:
+            np.random.seed(self.seed)
+
+    def increment_seed(self):
+        if self.seed is not None:
+            self.seed += 20
+
+    def reset_seed(self):
+        if self.seed is not None:
+            self.seed = self.original_seed
+
     def _create_random_obstacle(self, i):
         obstacle = Obstacle()
         obstacle.name = 'obstacle {}'.format(i)
@@ -49,13 +64,18 @@ class SurveyScenario(BaseScenario):
         grid_resolution = self.grid_resolution
 
         # Random start grid square
+        self.increment_seed()
+        self.random_seed()
         start_x = np.random.randint(0, grid_resolution)
+        self.random_seed()
         start_y = np.random.randint(0, grid_resolution)
 
         # Random length (1 to 4 grid squares)
+        self.random_seed()
         length = np.random.randint(1, 5)
 
         # Random direction (0 for horizontal, 1 for vertical)
+        self.random_seed()
         direction = np.random.randint(0, 2)
 
         # Initialize the obstacle mask
@@ -90,6 +110,7 @@ class SurveyScenario(BaseScenario):
         reward_mask = np.ones((self.grid_resolution, self.grid_resolution))
         
         # Randomly choose grid squares to be zero
+        self.random_seed()
         zero_indices = np.random.choice(self.grid_resolution * self.grid_resolution, zeros_count, replace=False)
         
         # Convert flat indices to 2D indices and assign zero
@@ -115,6 +136,7 @@ class SurveyScenario(BaseScenario):
             self.initialize_agent_position(agent, world)
         
         # Reset obstacles
+        self.reset_seed()
         world.obstacles = [self._create_random_obstacle(i) for i in range(self.num_obstacles)]
         world.obstacle_mask = self._create_obstacle_mask(world)
 
@@ -126,6 +148,7 @@ class SurveyScenario(BaseScenario):
         for i, landmark in enumerate(world.landmarks):
             landmark.color = np.array([0.25, 0.25, 0.25])
             # Random position for landmarks
+            self.random_seed()
             landmark.state.p_pos = np.random.uniform(-1, +1, world.dim_p)
             landmark.state.p_vel = np.zeros(world.dim_p)
 
