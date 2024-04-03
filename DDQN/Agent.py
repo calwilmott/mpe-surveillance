@@ -41,9 +41,11 @@ class DDQNAgentParams:
 
 class DDQNAgent(object):
 
-    def __init__(self, params: DDQNAgentParams, example_state, action_space, stats=None, observation_mode="image"):
+    def __init__(self, params: DDQNAgentParams, example_state, action_space, stats=None, observation_mode="image",
+                 num_agents=3):
         self.params = params
         self.obs_mode = observation_mode
+        self.num_agents = num_agents
         gamma = tf.constant(self.params.gamma, dtype=float)
         self.align_counter = 0
 
@@ -223,7 +225,7 @@ class DDQNAgent(object):
 
     def get_random_action(self):
         # return np.random.randint(0, self.num_actions)
-        return np.random.rand(3, self.num_actions)
+        return np.random.rand(self.num_agents, self.num_actions)
 
     def get_exploitation_action(self, state):
 

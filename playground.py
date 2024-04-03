@@ -6,9 +6,10 @@ from BaseTrainer import BaseTrainer
 
 
 observation_mode = "hybrid"
-env = SurveyEnv(num_agents=3, num_obstacles=4, vision_dist=0.2, grid_resolution=10, grid_max_reward=1,
+num_agents = 1
+env = SurveyEnv(num_agents=num_agents, num_obstacles=4, vision_dist=0.2, grid_resolution=10, grid_max_reward=1,
                 reward_delta=0.001, observation_mode=observation_mode, seed=81)
-base_trainer = BaseTrainer(env, observation_mode, is_render=True)
+base_trainer = BaseTrainer(env, observation_mode, num_agents, is_render=True)
 base_trainer.run()
 
 # env.reset()
