@@ -351,6 +351,8 @@ class DDQNAgent(object):
 
         self.soft_update(self.params.alpha)
 
+        return q_loss
+
     def save_weights(self, path_to_weights):
         self.target_network.save_weights(path_to_weights)
 

@@ -69,13 +69,14 @@ class BaseTrainer:
         while self.episode_count < self.trainer.params.num_episodes:
             bar.update(self.episode_count - last_ep)
             last_ep = self.episode_count
-            ep_step_rewards = self.train_episode()
+            ep_step_rewards, loss = self.train_episode()
             avg_ep_reward = np.average(ep_step_rewards)
             with self.writer.as_default():
                 tf.summary.scalar("average", avg_ep_reward, step=self.episode_count)
                 tf.summary.scalar("sum", sum(ep_step_rewards), step=self.episode_count)
                 tf.summary.scalar("max", np.max(ep_step_rewards), step=self.episode_count)
                 tf.summary.scalar("final_step", ep_step_rewards[-1], step=self.episode_count)
+                tf.summary.scalar("loss", loss, step=self.episode_count)
 
             if avg_ep_reward > best_avg_ep_reward:
                 best_avg_ep_reward = avg_ep_reward
@@ -141,8 +142,8 @@ class BaseTrainer:
             state, reward, done = self.step(state)
             step_reward = sum(reward) / 3.0
             ep_step_rewards.append(step_reward)
-            self.trainer.train_agent()
+            loss = self.trainer.train_agent()
 
         self.episode_count += 1
 
-        return ep_step_rewards
+        return ep_step_rewards, loss

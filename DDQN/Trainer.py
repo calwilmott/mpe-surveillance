@@ -6,8 +6,8 @@ import numpy as np
 class DDQNTrainerParams:
     def __init__(self):
         self.batch_size = 128
-        self.num_steps = 1000
-        self.num_steps_memory = 1000  # Number of steps taken by episodes while filling the memory buffer
+        self.num_steps = 500
+        self.num_steps_memory = 500  # Number of steps taken by episodes while filling the memory buffer
         self.num_episodes = 20000
         self.save_interval = min(5000, int(self.num_episodes) // 5)
         self.rm_pre_fill_ratio = 0.6
@@ -38,7 +38,8 @@ class DDQNTrainer:
             return
         mini_batch = self.replay_memory.sample(self.params.batch_size)
 
-        self.agent.train(mini_batch)
+        loss = self.agent.train(mini_batch)
+        return loss
 
     def should_fill_replay_memory(self):
         target_size = self.replay_memory.get_max_size() * self.params.rm_pre_fill_ratio
