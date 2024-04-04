@@ -8,8 +8,8 @@ class DDQNTrainerParams:
         self.batch_size = 128
         self.num_steps = 500
         self.num_steps_memory = 500  # Number of steps taken by episodes while filling the memory buffer
-        self.num_episodes = 20000
-        self.save_interval = min(5000, int(self.num_episodes) // 5)
+        self.num_episodes = 2000
+        self.save_interval = min(250, int(self.num_episodes) // 5)
         self.rm_pre_fill_ratio = 0.6
         self.rm_pre_fill_random = True
         self.eval_period = 5
