@@ -5,7 +5,7 @@ from multiagent.utils.visualization import visualize_image_observation
 # Change to have all of the configurable items out of the scenario
 # Would be good to have a configuration loader method as well
 
-env = SurveyEnv(num_agents=2, num_obstacles=4, vision_dist=0.2, grid_resolution=10, grid_max_reward=1, reward_delta=0.001, observation_mode="image")
+env = SurveyEnv(num_agents=1, num_obstacles=4, vision_dist=0.2, grid_resolution=10, grid_max_reward=1, reward_delta=0.001, observation_mode="image")
 env.reset()
 print(env.agents)
 count = 0

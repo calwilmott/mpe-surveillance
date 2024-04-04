@@ -1,41 +1,45 @@
 import numpy as np
-from multiagent.core import World, Agent, Landmark, Obstacle
+from multiagent.core import World, Agent, Obstacle
 from multiagent.scenario import BaseScenario
-import math
+from multiagent.utils.general import get_grid_coord, get_line_bresenham
+import numpy as np
+from multiagent.obs_utils import radial_basis_obs, upsample_channel
 
-class Scenario(BaseScenario):
+class SurveyScenario(BaseScenario):
+    def __init__(self, num_obstacles, num_agents, vision_dist, grid_resolution, grid_max_reward, reward_delta, observation_mode):
+        self.num_obstacles = num_obstacles
+        self.num_agents = num_agents
+        self.vision_dist = vision_dist
+        self.grid_resolution = grid_resolution
+        self.grid_max_reward = grid_max_reward
+        self.reward_delta = reward_delta
+        self.observation_mode = observation_mode
+
     def make_world(self):
         world = World()
-        # set any world properties first
-        # Create and add obstacles
-        num_obstacles = 4 # configurable
-
         world.dim_c = 2
-        num_agents = 3 # configurable
-        world.collaborative = False # configurable
+        world.collaborative = False
+
         # add agents
-        world.agents = [Agent() for i in range(num_agents)]
+        world.agents = [Agent() for i in range(self.num_agents)]
         for i, agent in enumerate(world.agents):
             agent.name = 'agent %d' % i
             agent.collide = True
             agent.silent = True
             agent.size = 0.05
-            agent.vision_dist = 0.2 # configurable
+            agent.vision_dist = self.vision_dist
 
         # Initialize grid
-        self.grid_resolution = 10  # configurable
-        # The maximum reward of a given grid square
-        self.grid_max_reward = 1  # configurable
-        # The amount to change reward of a given grid cell after each time step
-        self.reward_delta = 0.0001 # configurable
         world.grid = np.zeros((self.grid_resolution, self.grid_resolution))
-        world.obstacles = [self.create_random_obstacle(i) for i in range(num_obstacles)]
-        world.obstacle_mask = self.create_obstacle_mask(world)
+        world.obstacles = [self._create_random_obstacle(i) for i in range(self.num_obstacles)]
+        world.obstacle_mask = self._create_obstacle_mask(world)
+        world.reward_mask = self._create_reward_mask()
+
         # make initial conditions
         self.reset_world(world)
         return world
     
-    def create_random_obstacle(self, i):
+    def _create_random_obstacle(self, i):
         obstacle = Obstacle()
         obstacle.name = 'obstacle {}'.format(i)
         obstacle.collide = True
@@ -81,8 +85,20 @@ class Scenario(BaseScenario):
         obstacle.mask = obstacle_mask
 
         return obstacle
-
-    def create_obstacle_mask(self, world):
+    def _create_reward_mask(self, zeros_count=10):
+        # Initialize the reward mask with ones
+        reward_mask = np.ones((self.grid_resolution, self.grid_resolution))
+        
+        # Randomly choose grid squares to be zero
+        zero_indices = np.random.choice(self.grid_resolution * self.grid_resolution, zeros_count, replace=False)
+        
+        # Convert flat indices to 2D indices and assign zero
+        for index in zero_indices:
+            x, y = divmod(index, self.grid_resolution)
+            reward_mask[x, y] = 0
+        
+        return reward_mask
+    def _create_obstacle_mask(self, world):
         # Initialize the grid mask with ones
         obstacle_mask = np.ones((self.grid_resolution, self.grid_resolution))
 
@@ -156,45 +172,40 @@ class Scenario(BaseScenario):
         return True if dist < dist_min else False
 
     def reward(self, agent, world):
-        def get_grid_coord(pos):
-            return min(int((pos + 1) / 2 * self.grid_resolution), self.grid_resolution - 1)
 
-        # Calculate grid square based on agent position
-        grid_x = get_grid_coord(agent.state.p_pos[0])
-        grid_y = get_grid_coord(agent.state.p_pos[1])
-        grid_square = world.grid[grid_x, grid_y]
-        world.grid[grid_x, grid_y] = 0
+        # Calculate start and end points in grid coordinates
+        start_x = get_grid_coord(agent.state.p_pos[0], self.grid_resolution)
+        start_y = get_grid_coord(agent.state.p_pos[1], self.grid_resolution)
+        end_x = get_grid_coord(agent.state.p_pos[0] + agent.vision_dist * np.cos(agent.state.p_angle), self.grid_resolution)
+        end_y = get_grid_coord(agent.state.p_pos[1] + agent.vision_dist * np.sin(agent.state.p_angle), self.grid_resolution)
 
-        # Calculate reward for squares in the agent's line of sight
-        angle = agent.state.p_angle
-        for dist in np.linspace(0, agent.vision_dist, num=int(agent.vision_dist * self.grid_resolution)):
-            # Calculate the coordinates along the line of sight
-            sight_x = agent.state.p_pos[0] + dist * np.cos(angle)
-            sight_y = agent.state.p_pos[1] + dist * np.sin(angle)
+        reward = world.grid[start_x, start_y]  # Initialize reward
+        world.grid[start_x, start_y] = 0  # Clear the agent's current square
 
-            sight_grid_x = get_grid_coord(sight_x)
-            sight_grid_y = get_grid_coord(sight_y)
+        # Use Bresenham's algorithm to accurately determine the line of sight
+        line_points = get_line_bresenham((start_x, start_y), (end_x, end_y))
 
-            # Check if the line of sight is obstructed by an obstacle
-            if 0 <= sight_grid_x < self.grid_resolution and 0 <= sight_grid_y < self.grid_resolution:
-                if world.obstacle_mask[sight_grid_x, sight_grid_y] == 0:
-                    # Line of sight is blocked by an obstacle
-                    break  # Stop checking further squares in this direction
+        for (x, y) in line_points:
+            if 0 <= x < self.grid_resolution and 0 <= y < self.grid_resolution:
+                if world.obstacle_mask[x, y] == 0:
+                    break  # Line of sight is blocked by an obstacle
 
-                # Add grid value to reward and reset grid square
-                grid_square += world.grid[sight_grid_x, sight_grid_y]
-                world.grid[sight_grid_x, sight_grid_y] = 0
+                # Accumulate reward and clear the grid square
+                reward += world.grid[x, y]
+                world.grid[x, y] = 0
 
-        # Update reward grid if processing last agent
+        # Update the reward grid for the last agent, if necessary
         if agent == world.agents[-1]:
             grid_update = self.reward_delta * np.ones(shape=(self.grid_resolution, self.grid_resolution))
-
             world.grid += grid_update
             world.grid = np.clip(world.grid, a_min=0, a_max=self.grid_max_reward)
+            # Don't reward for obstacle grid squares
             world.grid *= world.obstacle_mask
+            # And, don't reward for masked grid squares
+            world.grid *= world.reward_mask
 
-        # Return accumulated grid value as reward
-        return grid_square
+        return reward
+
 
     def is_collision_rectangular(self, agent, obstacle, new_pos):
         ax, ay = new_pos
@@ -412,9 +423,12 @@ class Scenario(BaseScenario):
             return self._get_dense_obs(agent, world)
         elif self.observation_mode == "image":
             return self._get_img_obs(agent, world)
+        elif self.observation_mode == "hybrid":
+            return self._get_hybrid_obs(agent, world)
+        elif self.observation_mode == "upscaled_image":
+            return self._get_upscaled_img_obs(agent, world)
         else:
             raise ValueError("Invalid observation mode selected. Please set this parameter to 'dense' or 'image'.")
-
 
 
 
