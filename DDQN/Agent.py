@@ -2,6 +2,7 @@ import tensorflow as tf
 
 from tensorflow.keras import Model
 from tensorflow.keras.layers import Conv2D, Dense, Flatten, Concatenate, Input, AvgPool2D
+from tensorflow.keras.utils import plot_model
 
 import numpy as np
 
@@ -154,6 +155,7 @@ class DDQNAgent(object):
         self.q_optimizer = tf.optimizers.Adam(learning_rate=params.learning_rate, amsgrad=True)
 
         if self.params.print_summary:
+            plot_model(self.q_loss_model, to_file="model.png", show_shapes=True)
             self.q_loss_model.summary()
 
         if stats:

@@ -12,7 +12,6 @@ class DDQNTrainerParams:
         self.save_interval = min(250, int(self.num_episodes) // 5)
         self.rm_pre_fill_ratio = 0.6
         self.rm_pre_fill_random = True
-        self.eval_period = 5
         self.rm_size = 15000
         self.load_model = ""
 
@@ -50,7 +49,6 @@ class DDQNTrainer:
             return False
 
         if self.prefill_bar is None:
-            #print("Filling replay memory")
             self.prefill_bar = tqdm.tqdm(total=target_size)
 
         self.prefill_bar.update(self.replay_memory.get_size() - self.prefill_bar.n)
