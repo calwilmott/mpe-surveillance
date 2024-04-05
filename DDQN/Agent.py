@@ -1,15 +1,8 @@
 import tensorflow as tf
-
 from tensorflow.keras import Model
 from tensorflow.keras.layers import Conv2D, Dense, Flatten, Concatenate, Input, AvgPool2D
 from tensorflow.keras.utils import plot_model
-
 import numpy as np
-
-
-def print_node(x):
-    print(x)
-    return x
 
 
 class DDQNAgentParams:
@@ -42,7 +35,7 @@ class DDQNAgentParams:
 
 class DDQNAgent(object):
 
-    def __init__(self, params: DDQNAgentParams, example_state, action_space, stats=None, observation_mode="image",
+    def __init__(self, params: DDQNAgentParams, example_state, action_space, stats=None, observation_mode="hybrid",
                  num_agents=3):
         self.params = params
         self.obs_mode = observation_mode
@@ -90,7 +83,7 @@ class DDQNAgent(object):
             states.append(scalars_input)
         else:
             scalars_input = None
-        action_input = Input(shape=(self.num_actions,), name='action_input', dtype=tf.float32)
+        action_input = Input(shape=(), name='action_input', dtype=tf.int64)
         reward_input = Input(shape=(), name='reward_input', dtype=tf.float32)
         termination_input = Input(shape=(), name='termination_input', dtype=tf.bool)
         q_star_input = Input(shape=(), name='q_star_input', dtype=tf.float32)
@@ -121,17 +114,13 @@ class DDQNAgent(object):
         self.q_star_model = Model(inputs=states, outputs=q_star)
 
         # Define Bellman loss
-        # one_hot_rm_action = tf.one_hot(action_input, depth=self.num_actions, on_value=1.0, off_value=0.0, dtype=float)
-        # one_cold_rm_action = tf.one_hot(action_input, depth=self.num_actions, on_value=0.0, off_value=1.0, dtype=float)
-        # q_old = tf.stop_gradient(tf.multiply(q_values, one_cold_rm_action))
-        ones_vector = np.ones((self.num_actions,), dtype=np.float32)[tf.newaxis, ...]
-        cold_action_input = tf.subtract(ones_vector, action_input)
-
-        q_old = tf.stop_gradient(tf.multiply(q_values, cold_action_input))
+        max_action_input = tf.argmax(action_input, axis=1, name='max_action_input', output_type=tf.int64)
+        one_hot_rm_action = tf.one_hot(max_action_input, depth=self.num_actions, on_value=1.0, off_value=0.0, dtype=float)
+        one_cold_rm_action = tf.one_hot(max_action_input, depth=self.num_actions, on_value=0.0, off_value=1.0, dtype=float)
+        q_old = tf.stop_gradient(tf.multiply(q_values, one_cold_rm_action))
         gamma_terminated = tf.multiply(tf.cast(tf.math.logical_not(termination_input), tf.float32), gamma)
         q_update = tf.expand_dims(tf.add(reward_input, tf.multiply(q_star_input, gamma_terminated)), 1)
-        # q_update_hot = tf.multiply(q_update, one_hot_rm_action)
-        q_update_hot = tf.multiply(q_update, action_input)
+        q_update_hot = tf.multiply(q_update, one_hot_rm_action)
         q_new = tf.add(q_update_hot, q_old)
         q_loss = tf.losses.MeanSquaredError()(q_new, q_values)
 
@@ -180,7 +169,6 @@ class DDQNAgent(object):
         return model
 
     def create_map_proc(self, conv_in, name):
-
         if self.params.use_global_local:
             # Forking for global and local map
             # Global Map
@@ -221,25 +209,23 @@ class DDQNAgent(object):
             flatten_map = Flatten(name=name + 'flatten')(conv_map)
             return flatten_map
 
-    def act(self, state):
-        # return self.get_soft_max_exploration(state)
-        return self.get_action_probabilities(state)
+    def one_hot_action(self, action_nums):
+        action_array = np.zeros((self.num_agents, self.num_actions))
+        for i in range(len(action_nums)):
+            action_array[i][action_nums[i]] = 1.0
+        return action_array
 
     def get_random_action(self):
-        # return np.random.randint(0, self.num_actions)
-        return np.random.rand(self.num_agents, self.num_actions)
+        action_nums = np.random.randint(0, high=self.num_actions, size=self.num_agents)
+        action_array = self.one_hot_action(action_nums)
+        return action_array
 
     def get_exploitation_action(self, state):
-
         boolean_map_in = state.get_boolean_map()[tf.newaxis, ...]
         float_map_in = state.get_float_map()[tf.newaxis, ...]
         scalars = np.array(state.get_scalars(), dtype=np.single)[tf.newaxis, ...]
 
         return self.exploit_model([boolean_map_in, float_map_in, scalars]).numpy()[0]
-
-    def get_soft_max_exploration(self, state):
-        p = self.get_action_probabilities(state)
-        return np.random.choice(range(self.num_actions), size=1, p=p)
 
     def _stack_along(self, previous, new, iteration):
         if iteration == 0:
@@ -249,19 +235,25 @@ class DDQNAgent(object):
         else:
             return tf.concat([previous, new[tf.newaxis, ...]], axis=0)
 
-    def get_action_probabilities(self, state):
-        p = None
+    def get_soft_max_exploration(self, state):
+        action_nums = []
         for i in range(len(state)):
             if self.obs_mode == "hybrid":
                 boolean_map, float_map, scalars = self.get_network_inputs_from_state(state[i])
-                new_p = self.soft_explore_model(
+                p = self.soft_explore_model(
                     [float_map[tf.newaxis, ...], boolean_map[tf.newaxis, ...], scalars[tf.newaxis, ...]]
                 ).numpy()[0]
             else:
                 boolean_map, float_map, _ = self.get_network_inputs_from_state(state[i])
-                new_p = self.soft_explore_model([float_map[tf.newaxis, ...], boolean_map[tf.newaxis, ...]]).numpy()[0]
-            p = self._stack_along(p, new_p, i)
-        return p
+                p = self.soft_explore_model([float_map[tf.newaxis, ...], boolean_map[tf.newaxis, ...]]).numpy()[0]
+            action_num = np.random.choice(range(self.num_actions), size=1, p=p)
+            action_nums.append(action_num)
+
+        action_array = self.one_hot_action(action_nums)
+        return action_array
+
+    def act(self, state):
+        return self.get_soft_max_exploration(state)
 
     def get_exploitation_action_target(self, state):
         a = None
