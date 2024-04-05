@@ -36,12 +36,13 @@ class DDQNAgentParams:
 class DDQNAgent(object):
 
     def __init__(self, params: DDQNAgentParams, example_state, action_space, stats=None, observation_mode="hybrid",
-                 num_agents=3):
+                 num_agents=3, deep_discretization=False):
         self.params = params
         self.obs_mode = observation_mode
         self.num_agents = num_agents
         gamma = tf.constant(self.params.gamma, dtype=float)
         self.align_counter = 0
+        self.deep_discretization = deep_discretization
 
         if self.obs_mode == "image":
             grid_dim = np.shape(example_state)[0]
@@ -60,7 +61,7 @@ class DDQNAgent(object):
             self.float_map_shape = example_state.get_float_map_shape()
             self.scalars = example_state.get_num_scalars()
 
-        self.num_actions = action_space.n
+        self.num_actions = action_space
         if self.obs_mode == "hybrid":
             self.num_map_channels = image_obs[2]
         else:
@@ -212,7 +213,14 @@ class DDQNAgent(object):
     def one_hot_action(self, action_nums):
         action_array = np.zeros((self.num_agents, self.num_actions))
         for i in range(len(action_nums)):
-            action_array[i][action_nums[i]] = 1.0
+            if not self.deep_discretization:
+                action_array[i][action_nums[i]] = 1.0
+            else:
+                first_action = action_nums[i] % self.num_actions
+                action_array[i][first_action] = 1.0
+                for j in range(1, 4):
+                    action = action_nums[i] // int(pow(self.num_actions, j))
+                    action_array[i][action] = 1.0
         return action_array
 
     def get_random_action(self):

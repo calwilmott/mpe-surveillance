@@ -12,7 +12,7 @@ from DDQN.Trainer import DDQNTrainer, DDQNTrainerParams
 
 
 class BaseTrainer:
-    def __init__(self, environment, obs_mode, num_agents, is_render=False):
+    def __init__(self, environment, obs_mode, num_agents, deep_discretization=False, is_render=False):
         self.episode_count = 0
         self.step_count = 0
         self.episode_count = 0
@@ -20,11 +20,15 @@ class BaseTrainer:
         self.is_render = is_render
         self.env = environment
         self.run_path = self.get_run_path()
+        self.deep_discretization = deep_discretization
 
-        action_space = self.env.action_space[0]
+        if deep_discretization:
+            action_space = int(pow(self.env.action_space[0].n, 4))
+        else:
+            action_space = self.env.action_space[0].n
         example_obs = self.env.scenario.observation(self.env.agents[0], self.env.world)
         self.agent = DDQNAgent(params=DDQNAgentParams(), example_state=example_obs, observation_mode=obs_mode,
-                               action_space=action_space, num_agents=num_agents)
+                               action_space=action_space, num_agents=num_agents, deep_discretization=deep_discretization)
         self.trainer = DDQNTrainer(params=DDQNTrainerParams(), agent=self.agent)
         self.save_run_description()
         self.writer = tf.summary.create_file_writer(self.run_path + "/logs/")
@@ -59,6 +63,11 @@ class BaseTrainer:
             agent = DDQNAgentParams()
             for att in vars(agent).items():
                 f.write(f"{att[0]}: {att[1]}\n")
+            f.write("\nENV:\n")
+            for att in vars(self.env.scenario).items():
+                f.write(f"{att[0]}: {att[1]}\n")
+            f.write("\nDEEP DISCRETIZATION:\n")
+            f.write(f"deep_discretization: {self.deep_discretization}\n")
 
     def run(self):
         self.fill_replay_memory()
