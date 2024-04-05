@@ -44,9 +44,10 @@ class MultiAgentEnv(gym.Env):
             if self.discrete_action_space:
                 # ADDING 1 TO DIM_P FOR TORQUE (dont want to change dim_p to avoid confusion with cartesian dimension)
                 u_action_space = spaces.Discrete((world.dim_p + 1) * 2 + 1)
-                print("SETTING DISCRETE ACTION SPACE")
+                #print("SETTING DISCRETE ACTION SPACE")
             else:
-                u_action_space = spaces.Box(low=-agent.u_range, high=+agent.u_range, shape=(world.dim_p,), dtype=np.float32)
+                u_action_space = spaces.Box(low=-agent.u_range, high=+agent.u_range, shape=(world.dim_p,),
+                                            dtype=np.float32)
             if agent.movable:
                 total_action_space.append(u_action_space)
             # communication action space
@@ -71,19 +72,17 @@ class MultiAgentEnv(gym.Env):
             if observation_mode == 'dense':
                 self.observation_space.append(spaces.Box(low=-np.inf, high=+np.inf, shape=(obs_dim,), dtype=np.float32))
             elif observation_mode == 'image':
-                self.observation_space.append(spaces.Box(low=0, high=1, shape=observation_shape, dtype=np.float32))            
+                self.observation_space.append(spaces.Box(low=0, high=1, shape=observation_shape, dtype=np.float32))
             elif observation_mode == 'hybrid':
                 obs_space_dict = {
                     "image": spaces.Box(low=0, high=1, shape=observation_shape, dtype=np.float32),
                     "dense": spaces.Box(low=-np.inf, high=+np.inf, shape=(obs_dim,), dtype=np.float32)
                 }
-                self.observation_space.append(spaces.Dict(obs_space_dict))           
-            elif observation_mode == 'upscaled_image':
-                self.observation_space.append(spaces.Box(low=0, high=1, shape=observation_shape, dtype=np.float32))            
+                self.observation_space.append(spaces.Dict(obs_space_dict))
 
             else:
-                raise ValueError("Unknown observation mode:" + observation_mode)
-            print(self.observation_space)
+                raise ValueError(f"Unknown observation mode: {observation_mode}")
+            #print(self.observation_space)
             agent.action.c = np.zeros(self.world.dim_c)
 
         # rendering
@@ -113,7 +112,6 @@ class MultiAgentEnv(gym.Env):
             obs_n.append(self._get_obs(agent))
             info_n['n'].append(self._get_info(agent))
 
-        
         # all agents get total reward in cooperative case
         reward = np.sum(reward_n)
         if self.shared_reward:
@@ -172,7 +170,7 @@ class MultiAgentEnv(gym.Env):
             size = action_space.high - action_space.low + 1
             index = 0
             for s in size:
-                act.append(action[index:(index+s)])
+                act.append(action[index:(index + s)])
                 index += s
             action = act
         else:
@@ -240,14 +238,14 @@ class MultiAgentEnv(gym.Env):
             # create viewers (if necessary)
             if self.viewers[i] is None:
                 # import rendering only if we need it (and don't import for headless machines)
-                #from gym.envs.classic_control import rendering
+                # from gym.envs.classic_control import rendering
                 from multiagent import rendering
-                self.viewers[i] = rendering.Viewer(700,700)
+                self.viewers[i] = rendering.Viewer(700, 700)
 
         # create rendering geometry
         if self.render_geoms is None:
             # import rendering only if we need it (and don't import for headless machines)
-            #from gym.envs.classic_control import rendering
+            # from gym.envs.classic_control import rendering
             from multiagent import rendering
             self.render_geoms = []
             self.render_geoms_xform = []
@@ -291,8 +289,8 @@ class MultiAgentEnv(gym.Env):
             for i in range(grid_size):
                 for j in range(grid_size):
                     # Calculate grid square position and size
-                    grid_x = (i / grid_size) * self.world.dim_p - self.world.dim_p/2
-                    grid_y = (j / grid_size) * self.world.dim_p - self.world.dim_p/2
+                    grid_x = (i / grid_size) * self.world.dim_p - self.world.dim_p / 2
+                    grid_y = (j / grid_size) * self.world.dim_p - self.world.dim_p / 2
                     grid_square_size = (self.world.dim_p / grid_size)
 
                     # Create a square geometry for each grid cell
@@ -319,13 +317,14 @@ class MultiAgentEnv(gym.Env):
             # Calculate the corners of the rectangle
             x, y = obstacle.state.p_pos
             dx, dy = obstacle.width / 2, obstacle.height / 2
-            corners = [(x-dx, y-dy), (x-dx, y+dy), (x+dx, y+dy), (x+dx, y-dy)]
+            corners = [(x - dx, y - dy), (x - dx, y + dy), (x + dx, y + dy), (x + dx, y - dy)]
+
             # Create the rectangle
             obstacle_geom = rendering.make_polygon(corners)
             obstacle_geom.set_color(*obstacle.color)  # Red color
             for viewer in self.viewers:
                 viewer.add_onetime(obstacle_geom)
-        
+
         results = []
         for i in range(len(self.viewers)):
             from multiagent import rendering
@@ -342,7 +341,7 @@ class MultiAgentEnv(gym.Env):
                 if 'obstacle' in entity.name:
                     continue
                 self.render_geoms_xform[e].set_translation(*entity.state.p_pos)
-                
+
                 if 'agent' in entity.name:
                     # Update the rotation of the directional line for this agent
                     line = self.agent_direction_lines[line_index]
@@ -351,7 +350,7 @@ class MultiAgentEnv(gym.Env):
                     line_index += 1
             # render to display or array
             results.append(self.viewers[i].render(return_rgb_array = mode=='rgb_array'))
-        
+
         return results
 
     # create receptor field locations in local coordinate frame
@@ -371,7 +370,7 @@ class MultiAgentEnv(gym.Env):
         if receptor_type == 'grid':
             for x in np.linspace(-range_max, +range_max, 5):
                 for y in np.linspace(-range_max, +range_max, 5):
-                    dx.append(np.array([x,y]))
+                    dx.append(np.array([x, y]))
         return dx
 
 
@@ -380,7 +379,7 @@ class MultiAgentEnv(gym.Env):
 class BatchMultiAgentEnv(gym.Env):
     metadata = {
         'runtime.vectorized': True,
-        'render.modes' : ['human', 'rgb_array']
+        'render.modes': ['human', 'rgb_array']
     }
 
     def __init__(self, env_batch):
@@ -405,7 +404,7 @@ class BatchMultiAgentEnv(gym.Env):
         info_n = {'n': []}
         i = 0
         for env in self.env_batch:
-            obs, reward, done, _ = env.step(action_n[i:(i+env.n)], time)
+            obs, reward, done, _ = env.step(action_n[i:(i + env.n)], time)
             i += env.n
             obs_n += obs
             # reward = [r / len(self.env_batch) for r in reward]
