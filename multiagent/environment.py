@@ -81,13 +81,8 @@ class MultiAgentEnv(gym.Env):
                 self.observation_space.append(spaces.Dict(obs_space_dict))
 
             else:
-<<<<<<< HEAD
-                raise ValueError("Unknown observation mode:" + observation_mode)
-            print(self.observation_space)
-=======
                 raise ValueError(f"Unknown observation mode: {observation_mode}")
             #print(self.observation_space)
->>>>>>> master
             agent.action.c = np.zeros(self.world.dim_c)
 
         # rendering
