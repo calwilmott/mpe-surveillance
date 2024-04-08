@@ -44,7 +44,6 @@ class MultiAgentEnv(gym.Env):
             if self.discrete_action_space:
                 # ADDING 1 TO DIM_P FOR TORQUE (dont want to change dim_p to avoid confusion with cartesian dimension)
                 u_action_space = spaces.Discrete((world.dim_p + 1) * 2 + 1)
-                #print("SETTING DISCRETE ACTION SPACE")
             else:
                 u_action_space = spaces.Box(low=-agent.u_range, high=+agent.u_range, shape=(world.dim_p,),
                                             dtype=np.float32)
@@ -79,10 +78,11 @@ class MultiAgentEnv(gym.Env):
                     "dense": spaces.Box(low=-np.inf, high=+np.inf, shape=(obs_dim,), dtype=np.float32)
                 }
                 self.observation_space.append(spaces.Dict(obs_space_dict))
+            elif observation_mode == 'upscaled_image':
+                self.observation_space.append(spaces.Box(low=0, high=1, shape=observation_shape, dtype=np.float32))
 
             else:
                 raise ValueError(f"Unknown observation mode: {observation_mode}")
-            #print(self.observation_space)
             agent.action.c = np.zeros(self.world.dim_c)
 
         # rendering

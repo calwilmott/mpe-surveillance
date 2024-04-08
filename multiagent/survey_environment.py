@@ -5,7 +5,7 @@ from multiagent.scenarios.simple_survey_region import SurveyScenario
 class SurveyEnv(MultiAgentEnv):
     def __init__(self, num_obstacles: int = 4, num_agents: int = 3, vision_dist: float = 0.5, grid_resolution: int = 10,
                  grid_max_reward: float = 1.0, reward_delta: float = 0.0001, observation_mode: str = "image",
-                 seed: int = None):
+                 seed: int = None, reward_type: str = "pov"):
         """
         Initializes the Survey environment with the specified configuration.
 
@@ -18,22 +18,29 @@ class SurveyEnv(MultiAgentEnv):
             reward_delta (float): The amount by which the reward of a grid cell increases after each time step. This can be used to control the frequency with which an optimal policy would dictate than an agent should re-visit a grid square.
             observation_mode (str): The mode of observation for the agents. This can determine how agents perceive their environment, e.g., as raw pixel values ("image") or as processed features ("dense").
                                     Select the "hybrid" mode for a combination of both feature representations.
+            seed (int): The seed for random generation of obstacles and areas of no interest.
+            reward_type (str): "pov" or "map". Determines if the reward will be calculated by cells seen by the agent at the current step or the map.
 
         Returns:
             None
         """
+
         # Load the scenario with the specified parameters
         self.scenario = SurveyScenario(num_obstacles, num_agents, vision_dist, grid_resolution, grid_max_reward,
-                                       reward_delta, observation_mode, seed)
-        # Create the world
+                                       reward_delta, observation_mode, seed, reward_type)
 
+        # Create the world
         world = self.scenario.make_world()
 
         if observation_mode == "image":
             obs_shape = self.scenario._get_img_obs(world.agents[0], world).shape
-        else:
+        elif observation_mode == "upscaled_image":
+            obs_shape = self.scenario._get_upscaled_img_obs(world.agents[0], world).shape
+        else:  # "hybrid". "dense" does not use obs_shape
             obs_shape = self.scenario._get_img_obs(world.agents[0], world)[:, :, 4:].shape
+
         # Initialize the parent class with the necessary functions
         obs_shape = self.scenario._get_img_obs(world.agents[0], world).shape
+
         super().__init__(world, self.scenario.reset_world, self.scenario.reward, self.scenario.observation,
                          observation_mode=observation_mode, observation_shape=obs_shape)

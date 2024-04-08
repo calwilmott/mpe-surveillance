@@ -30,7 +30,7 @@ class Scenario(BaseScenario):
             agent.vision_dist = self.vision_dist
 
         # Initialize grid
-        world.grid = np.zeros((self.grid_resolution, self.grid_resolution))
+        world.grid = np.ones((self.grid_resolution, self.grid_resolution))
         world.obstacles = [self._create_random_obstacle(i) for i in range(self.num_obstacles)]
         world.obstacle_mask = self._create_obstacle_mask(world)
         world.reward_mask = self._create_reward_mask()
@@ -109,7 +109,8 @@ class Scenario(BaseScenario):
 
         return obstacle_mask
     def reset_world(self, world):
-        # Random properties for agents
+        # random properties for agents
+        world.grid = np.ones((self.grid_resolution, self.grid_resolution))
         for i, agent in enumerate(world.agents):
             agent.color = np.array([0.35, 0.35, 0.85])
             # Initialize agent position
