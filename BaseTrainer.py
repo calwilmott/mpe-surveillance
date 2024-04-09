@@ -12,7 +12,7 @@ from DDQN.Trainer import DDQNTrainer, DDQNTrainerParams
 
 
 class BaseTrainer:
-    def __init__(self, environment, obs_mode, num_agents, deep_discretization=False, is_render=False):
+    def __init__(self, environment, obs_mode, num_agents, deep_discretization=False, is_render=False, is_test=False):
         self.episode_count = 0
         self.step_count = 0
         self.episode_count = 0
@@ -20,7 +20,6 @@ class BaseTrainer:
         self.num_agents = num_agents
         self.deep_discretization = deep_discretization
         self.is_render = is_render
-        self.run_path = self.get_run_path()
 
         if deep_discretization:
             action_space = int(pow(self.env.action_space[0].n, 4))
@@ -32,8 +31,11 @@ class BaseTrainer:
                                observation_mode=obs_mode, action_space=action_space,
                                num_agents=num_agents, deep_discretization=deep_discretization)
         self.trainer = DDQNTrainer(params=DDQNTrainerParams(), agent=self.agent)
-        self.save_run_description()
-        self.writer = tf.summary.create_file_writer(self.run_path + "/logs/")
+
+        if not is_test:
+            self.run_path = self.get_run_path()
+            self.save_run_description()
+            self.writer = tf.summary.create_file_writer(self.run_path + "/logs/")
 
     def get_run_path(self):
         if not os.path.exists("runs/"):
