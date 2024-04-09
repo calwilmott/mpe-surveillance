@@ -147,8 +147,9 @@ class BaseTrainer:
                 self.env.render()
                 time.sleep(0.0001)
 
-        avg_ep_reward = np.average(ep_step_rewards)
-        self.log_tensorboard(avg_ep_reward, ep_step_rewards, title="test")
+        if not render_test:
+            avg_ep_reward = np.average(ep_step_rewards)
+            self.log_tensorboard(avg_ep_reward, ep_step_rewards, title="test")
 
         return ep_step_rewards
 
