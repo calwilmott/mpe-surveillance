@@ -17,9 +17,13 @@ with open("runs/run" + run_number + "/run_description.txt") as f:
             if key in line:
                 line_values = line.split(" ")
                 param_type = type(params[key])
+                print(line_values)
                 if param_type == str:
                     # Removes \n from strings
                     params[key] = param_type(line_values[-1][:-1])
+                elif param_type == bool:
+                    # Checks for booleans values
+                    params[key] = line_values[-1][0] == "T"
                 else:
                     params[key] = param_type(line_values[-1])
 
