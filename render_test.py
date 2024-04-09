@@ -8,4 +8,4 @@ env = SurveyEnv(num_agents=num_agents, num_obstacles=4, vision_dist=0.2, grid_re
 base_trainer = BaseTrainer(env, observation_mode, num_agents, deep_discretization=True, is_render=True)
 weights_path = input("Relative path to weights:\n")
 base_trainer.agent.load_weights(weights_path)
-base_trainer.test_episode()
+base_trainer.test_episode(render_test=True)

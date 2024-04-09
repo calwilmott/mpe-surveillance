@@ -130,7 +130,7 @@ class BaseTrainer:
         plt.clf()
         plt.close()
 
-    def test_episode(self):
+    def test_episode(self, render_test=False):
         self.step_count = 0
         state = self.env.reset()
         done = False
@@ -140,6 +140,10 @@ class BaseTrainer:
             state, reward, done = self.step(state, is_test=True)
             step_reward = sum(reward) / self.num_agents
             ep_step_rewards.append(step_reward)
+
+            if render_test:
+                self.env.render()
+                time.sleep(0.0001)
 
         avg_ep_reward = np.average(ep_step_rewards)
         self.log_tensorboard(avg_ep_reward, ep_step_rewards, title="test")
