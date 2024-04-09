@@ -16,19 +16,21 @@ class BaseTrainer:
         self.episode_count = 0
         self.step_count = 0
         self.episode_count = 0
-        self.num_agents = num_agents
-        self.is_render = is_render
         self.env = environment
-        self.run_path = self.get_run_path()
+        self.num_agents = num_agents
         self.deep_discretization = deep_discretization
+        self.is_render = is_render
+        self.run_path = self.get_run_path()
 
         if deep_discretization:
             action_space = int(pow(self.env.action_space[0].n, 4))
         else:
             action_space = self.env.action_space[0].n
         example_obs = self.env.scenario.observation(self.env.agents[0], self.env.world)
-        self.agent = DDQNAgent(params=DDQNAgentParams(), example_state=example_obs, observation_mode=obs_mode,
-                               action_space=action_space, num_agents=num_agents, deep_discretization=deep_discretization)
+
+        self.agent = DDQNAgent(params=DDQNAgentParams(), example_state=example_obs,
+                               observation_mode=obs_mode, action_space=action_space,
+                               num_agents=num_agents, deep_discretization=deep_discretization)
         self.trainer = DDQNTrainer(params=DDQNTrainerParams(), agent=self.agent)
         self.save_run_description()
         self.writer = tf.summary.create_file_writer(self.run_path + "/logs/")
@@ -40,7 +42,7 @@ class BaseTrainer:
             os.mkdir(path)
             return path
         else:
-            i = 1
+            i = 0
             while i < 1000:
                 path = f"runs/run{i}/"
                 if not os.path.exists(path):
@@ -71,75 +73,121 @@ class BaseTrainer:
 
     def run(self):
         self.fill_replay_memory()
-        bar = tqdm.tqdm(total=int(self.trainer.params.num_episodes))
-        last_ep = 0
         best_avg_ep_reward = 0
         best_run = None
+        last_run = None
+        ep_step_rewards = None
+        bar = tqdm.tqdm(total=int(self.trainer.params.num_episodes))
         gc.collect()
+
         while self.episode_count < self.trainer.params.num_episodes:
-            bar.update(self.episode_count - last_ep)
-            last_ep = self.episode_count
+            bar.update()
             ep_step_rewards, loss = self.train_episode()
             avg_ep_reward = np.average(ep_step_rewards)
-            with self.writer.as_default():
-                tf.summary.scalar("average", avg_ep_reward, step=self.episode_count)
-                tf.summary.scalar("sum", sum(ep_step_rewards), step=self.episode_count)
-                tf.summary.scalar("max", np.max(ep_step_rewards), step=self.episode_count)
-                tf.summary.scalar("final_step", ep_step_rewards[-1], step=self.episode_count)
-                tf.summary.scalar("loss", loss, step=self.episode_count)
+            self.log_tensorboard(avg_ep_reward, ep_step_rewards, loss)
+            last_run = ((self.env.world.obstacle_mask, self.env.world.reward_mask), self.agent)
 
             if avg_ep_reward > best_avg_ep_reward:
                 best_avg_ep_reward = avg_ep_reward
-                self.log_best_run(ep_step_rewards, self.episode_count)
-                best_run = ((self.env.world.obstacle_mask, self.env.world.reward_mask), self.agent)
+                self.log_run(ep_step_rewards, self.episode_count)
+                best_run = last_run
+
+            if self.episode_count % self.trainer.params.eval_interval == 0:
+                self.test_episode()
 
             if self.episode_count % self.trainer.params.save_interval == 0:
-                self.save_best_run_to_disk(best_run)
+                self.save_run_to_disk(best_run)
 
-    def save_best_run_to_disk(self, best_run):
-        world = best_run[0]
-        with open(self.run_path + "world.pickle", 'wb') as file:
+        self.log_run(ep_step_rewards, self.episode_count, "last")
+        self.save_run_to_disk(last_run, "last")
+
+    def log_tensorboard(self, avg_ep_reward, ep_step_rewards, loss=None, title="train"):
+        with self.writer.as_default():
+            tf.summary.scalar(title + "/average", avg_ep_reward, step=self.episode_count)
+            tf.summary.scalar(title + "/max", np.max(ep_step_rewards), step=self.episode_count)
+            tf.summary.scalar(title + "/final_step", ep_step_rewards[-1], step=self.episode_count)
+
+            if title == "train":
+                tf.summary.scalar(title + "/loss", loss, step=self.episode_count)
+
+    def save_run_to_disk(self, run, title="best"):
+        world = run[0]
+        with open(self.run_path + title + "_world.pickle", 'wb') as file:
             pickle.dump(world, file)
 
-        agent = best_run[1]
-        agent.save_model(self.run_path + "model")
-        agent.save_weights(self.run_path + "weights")
+        agent = run[1]
+        agent.save_weights(self.run_path + title + "_weights")
 
-    def log_best_run(self, rewards, iter):
-        best_run_path = self.run_path + "best.png"
-        if os.path.exists(best_run_path):
-            os.remove(best_run_path)
+    def log_run(self, rewards, episode, title="best"):
+        run_path = self.run_path + title + ".png"
+        if os.path.exists(run_path):
+            os.remove(run_path)
 
         plt.plot(rewards)
-        plt.title(f"Best run ({iter})")
-        plt.savefig(best_run_path)
+        caps_title = title[0].upper() + title[1:]
+        plt.title(f"{caps_title} run ({episode})")
+        plt.savefig(run_path)
         plt.clf()
         plt.close()
+
+    def test_episode(self):
+        self.step_count = 0
+        state = self.env.reset()
+        done = False
+        ep_step_rewards = []
+
+        while not done:
+            state, reward, done = self.step(state, is_test=True)
+            step_reward = sum(reward) / self.num_agents
+            ep_step_rewards.append(step_reward)
+
+        avg_ep_reward = np.average(ep_step_rewards)
+        self.log_tensorboard(avg_ep_reward, ep_step_rewards, title="test")
+
+        return ep_step_rewards
 
     def fill_replay_memory(self):
         while self.trainer.should_fill_replay_memory():
             self.step_count = 0
             state = self.env.reset()
             while True:
-                self.step(state, random=self.trainer.params.rm_pre_fill_random, is_filling_memory=True)
+                self.step(state, is_filling_memory=True)
                 if self.step_count >= self.trainer.params.num_steps_memory:
                     break
 
-    def step(self, state, random=False, is_filling_memory=False):
+    def step(self, state, is_filling_memory=False, is_test=False):
         finished = False
-        if random:
+        if is_filling_memory:
             action = self.agent.get_random_action()
+        elif is_test:
+            action = self.agent.get_exploitation_action_target(state)
         else:
             action = self.agent.act(state)
+
+        # Adjusts dimensions of array if needed
         if np.shape(action)[0] == 7:
             action = [action]
-        next_state, reward, done, info = self.env.step(action)
-        self.trainer.add_experience(state, action, reward, next_state, done)
+
+        # Converts action if deep discretization is being used
+        if self.deep_discretization:
+            env_action = self.get_deep_action(action)
+        else:
+            env_action = action
+
+        next_state, reward, done, info = self.env.step(env_action)
         self.step_count += 1
+
+        if not is_test:
+            self.trainer.add_experience(state, action, reward, next_state, done)
+
+        # Uses map reward to allow for a fair comparison between reward types
+        if self.env.scenario.reward_type != "map":
+            reward = self.env.scenario.get_map_reward(self.env.world)
+
         if self.step_count >= self.trainer.params.num_steps:
             finished = True
 
-        if self.is_render and not is_filling_memory:
+        if self.is_render and not is_filling_memory and not is_test:
             self.env.render()
             time.sleep(0.0001)
 
@@ -147,9 +195,11 @@ class BaseTrainer:
 
     def train_episode(self):
         self.step_count = 0
+        loss = None
         state = self.env.reset()
         done = False
         ep_step_rewards = []
+
         while not done:
             state, reward, done = self.step(state)
             step_reward = sum(reward) / self.num_agents
@@ -159,3 +209,16 @@ class BaseTrainer:
         self.episode_count += 1
 
         return ep_step_rewards, loss
+
+    def get_deep_action(self, deep_action):
+        action_space = self.env.action_space[0].n
+        action_array = np.zeros((self.num_agents, action_space))
+
+        for i in range(len(deep_action)):
+            action_num = np.nonzero(deep_action)[1][i]
+            for j in range(3, -1, -1):
+                index = action_num // int(pow(action_space, j))
+                action_num = action_num % int(pow(action_space, j))
+                action_array[i][index] += 0.25
+
+        return action_array

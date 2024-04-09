@@ -9,9 +9,11 @@ class DDQNTrainerParams:
         self.num_steps = 500
         self.num_steps_memory = 500  # Number of steps taken by episodes while filling the memory buffer
         self.num_episodes = 2000
-        self.save_interval = min(250, int(self.num_episodes) // 5)
+        # Save interval is s=num_episodes//5, as long as s is in the range (10, 250)
+        self.save_interval = min(250, max(int(self.num_episodes) // 5, 10))
+        self.eval_interval = 5
+        # Replay Memory parameters
         self.rm_pre_fill_ratio = 0.6
-        self.rm_pre_fill_random = True
         self.rm_size = 15000
         self.load_model = ""
 

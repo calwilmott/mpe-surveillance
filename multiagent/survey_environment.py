@@ -1,6 +1,6 @@
 from multiagent.environment import MultiAgentEnv
 from multiagent.scenarios.simple_survey_region import SurveyScenario
-
+import pickle
 
 class SurveyEnv(MultiAgentEnv):
     def __init__(self, num_obstacles: int = 4, num_agents: int = 3, vision_dist: float = 0.5, grid_resolution: int = 10,
@@ -44,3 +44,11 @@ class SurveyEnv(MultiAgentEnv):
 
         super().__init__(world, self.scenario.reset_world, self.scenario.reward, self.scenario.observation,
                          observation_mode=observation_mode, observation_shape=obs_shape)
+
+    def save_world(self, filename):
+        with open(filename, 'wb') as f:
+            pickle.dump(self.world, f)
+
+    def load_world(self, filename):
+        with open(filename, 'rb') as f:
+            self.world = pickle.load(f)

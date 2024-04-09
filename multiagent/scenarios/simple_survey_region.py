@@ -246,10 +246,15 @@ class SurveyScenario(BaseScenario):
             self.all_line_points = []
 
         if self.reward_type == "map":
-            # Doesn't count obstacles and reward_maks cells to calculate reward
-            discount_cells = np.sum(np.logical_not(np.logical_and(world.obstacle_mask, world.reward_mask)))
-            grid_area = self.grid_resolution * self.grid_resolution
-            reward = grid_area - np.sum(world.grid) - discount_cells
+            reward = self.get_map_reward(world)
+
+        return reward
+
+    def get_map_reward(self, world):
+        # Doesn't count obstacles and reward_maks cells to calculate reward
+        discount_cells = np.sum(np.logical_not(np.logical_and(world.obstacle_mask, world.reward_mask)))
+        grid_area = self.grid_resolution * self.grid_resolution
+        reward = grid_area - np.sum(world.grid) - discount_cells
 
         return reward
 

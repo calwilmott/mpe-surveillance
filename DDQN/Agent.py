@@ -213,18 +213,12 @@ class DDQNAgent(object):
     def one_hot_action(self, action_nums):
         action_array = np.zeros((self.num_agents, self.num_actions))
         for i in range(len(action_nums)):
-            if not self.deep_discretization:
-                action_array[i][action_nums[i]] = 1.0
-            else:
-                first_action = action_nums[i] % self.num_actions
-                action_array[i][first_action] = 1.0
-                for j in range(1, 4):
-                    action = action_nums[i] // int(pow(self.num_actions, j))
-                    action_array[i][action] = 1.0
+            action_array[i][action_nums[i]] = 1.0
         return action_array
 
     def get_random_action(self):
-        action_nums = np.random.randint(0, high=self.num_actions, size=self.num_agents)
+        np.random.seed(None)
+        action_nums = np.random.randint(low=0, high=self.num_actions, size=self.num_agents)
         action_array = self.one_hot_action(action_nums)
         return action_array
 
@@ -235,13 +229,6 @@ class DDQNAgent(object):
 
         return self.exploit_model([boolean_map_in, float_map_in, scalars]).numpy()[0]
 
-    def _stack_along(self, previous, new, iteration):
-        if iteration == 0:
-            return new
-        elif iteration == 1:
-            return tf.stack([previous, new])
-        else:
-            return tf.concat([previous, new[tf.newaxis, ...]], axis=0)
 
     def get_soft_max_exploration(self, state):
         action_nums = []
@@ -253,7 +240,9 @@ class DDQNAgent(object):
                 ).numpy()[0]
             else:
                 boolean_map, float_map, _ = self.get_network_inputs_from_state(state[i])
-                p = self.soft_explore_model([float_map[tf.newaxis, ...], boolean_map[tf.newaxis, ...]]).numpy()[0]
+                p = self.soft_explore_model(
+                    [float_map[tf.newaxis, ...], boolean_map[tf.newaxis, ...]]
+                ).numpy()[0]
             action_num = np.random.choice(range(self.num_actions), size=1, p=p)
             action_nums.append(action_num)
 
@@ -264,18 +253,22 @@ class DDQNAgent(object):
         return self.get_soft_max_exploration(state)
 
     def get_exploitation_action_target(self, state):
-        a = None
+        action_nums = []
         for i in range(len(state)):
             if self.obs_mode == "hybrid":
                 boolean_map, float_map, scalars = self.get_network_inputs_from_state(state[i])
-                new_a = self.exploit_model_target(
+                action_num = self.exploit_model_target(
                     [float_map[tf.newaxis, ...], boolean_map[tf.newaxis, ...], scalars[tf.newaxis, ...]]
                 ).numpy()[0]
             else:
                 boolean_map, float_map, _ = self.get_network_inputs_from_state(state[i])
-                new_a = self.exploit_model_target([float_map[tf.newaxis, ...], boolean_map[tf.newaxis, ...]]).numpy()[0]
-            a = self._stack_along(a, new_a, i)
-        return a
+                action_num = self.exploit_model_target(
+                    [float_map[tf.newaxis, ...], boolean_map[tf.newaxis, ...]]
+                ).numpy()[0]
+            action_nums.append(action_num)
+
+        action_array = self.one_hot_action(action_nums)
+        return action_array
 
     def hard_update(self):
         self.target_network.set_weights(self.q_network.get_weights())
