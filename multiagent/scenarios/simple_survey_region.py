@@ -135,11 +135,6 @@ class SurveyScenario(BaseScenario):
         return obstacle_mask
 
     def reset_world(self, world):
-        # Random properties for agents
-        for i, agent in enumerate(world.agents):
-            agent.color = np.array([0.35, 0.35, 0.85])
-            # Initialize agent position
-            self.initialize_agent_position(agent, world)
 
         # Reset obstacles
         self.reset_seed()
@@ -157,6 +152,12 @@ class SurveyScenario(BaseScenario):
             self.random_seed()
             landmark.state.p_pos = np.random.uniform(-1, +1, world.dim_p)
             landmark.state.p_vel = np.zeros(world.dim_p)
+                # Random properties for agents
+        for i, agent in enumerate(world.agents):
+            agent.color = np.array([0.35, 0.35, 0.85])
+            # Initialize agent position
+            self.initialize_agent_position(agent, world)
+
 
     def initialize_agent_position(self, agent, world):
         while True:
