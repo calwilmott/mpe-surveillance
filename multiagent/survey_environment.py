@@ -36,6 +36,8 @@ class SurveyEnv(MultiAgentEnv):
             obs_shape = self.scenario._get_img_obs(world.agents[0], world).shape
         elif observation_mode == "upscaled_image":
             obs_shape = self.scenario._get_upscaled_img_obs(world.agents[0], world).shape
+        elif observation_mode == "dense_w_grid":
+            obs_shape = self.scenario._get_dense_w_grid_obs(world.agents[0], world).shape
         else:  # "hybrid". "dense" does not use obs_shape
             obs_shape = self.scenario._get_img_obs(world.agents[0], world)[:, :, 4:].shape
 

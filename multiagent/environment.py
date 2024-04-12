@@ -70,6 +70,8 @@ class MultiAgentEnv(gym.Env):
             obs_dim = len(observation_callback(agent, self.world))
             if observation_mode == 'dense':
                 self.observation_space.append(spaces.Box(low=-np.inf, high=+np.inf, shape=(obs_dim,), dtype=np.float32))
+            elif observation_mode == 'dense_w_grid':
+                self.observation_space.append(spaces.Box(low=-np.inf, high=+np.inf, shape=(obs_dim,), dtype=np.float32))
             elif observation_mode == 'image':
                 self.observation_space.append(spaces.Box(low=0, high=1, shape=observation_shape, dtype=np.float32))
             elif observation_mode == 'hybrid':
@@ -82,7 +84,7 @@ class MultiAgentEnv(gym.Env):
                 self.observation_space.append(spaces.Box(low=0, high=1, shape=observation_shape, dtype=np.float32))
 
             else:
-                raise ValueError(f"Unknown observation mode: {observation_mode}")
+                raise ValueError("Unknown observation mode:"+observation_mode)
             agent.action.c = np.zeros(self.world.dim_c)
 
         # rendering

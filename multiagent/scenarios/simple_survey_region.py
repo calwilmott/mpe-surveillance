@@ -3,7 +3,7 @@ from multiagent.scenario import BaseScenario
 from multiagent.utils.general import get_grid_coord, get_line_bresenham
 import numpy as np
 from multiagent.obs_utils import radial_basis_obs, upsample_channel
-
+from icecream import ic
 
 class SurveyScenario(BaseScenario):
     def __init__(self, num_obstacles, num_agents, vision_dist, grid_resolution, grid_max_reward, reward_delta,
@@ -23,7 +23,7 @@ class SurveyScenario(BaseScenario):
     def make_world(self):
         world = World()
         world.dim_c = 2
-        world.collaborative = False
+        world.collaborative = True
 
         # add agents
         world.agents = [Agent() for i in range(self.num_agents)]
@@ -160,6 +160,7 @@ class SurveyScenario(BaseScenario):
 
     def initialize_agent_position(self, agent, world):
         while True:
+            np.random.seed(None)
             # Generate a random position for the agent
             agent.state.p_pos = np.random.uniform(-1, +1, world.dim_p)
             agent.state.p_vel = np.zeros(world.dim_p)
@@ -465,6 +466,52 @@ class SurveyScenario(BaseScenario):
         return np.concatenate([agent.state.p_vel] + [agent.state.p_pos] + [agent.state.p_angle] + [
             agent.state.p_angle_vel] + entity_pos + other_pos)
 
+    def _get_dense_w_grid_obs(self, agent, world):
+        """
+        WARNING: This observation does not contain information about rewards or obstacles,
+        which may be necessary for training a performant agent.
+
+        Generates a dense observation for the given agent in the world.
+
+        The dense observation is a 1D NumPy array containing various features:
+            - Agent's velocity (2D vector)
+            - Agent's position (2D vector)
+            - Agent's angle (1D scalar)
+            - Agent's angular velocity (1D scalar)
+            - Relative positions of all landmarks (2D vectors for each landmark)
+            - Relative positions of all other agents (2D vectors for each other agent)
+
+        Parameters:
+            agent: The agent for which to generate the observation.
+            world: The world in which the agent resides.
+
+        Returns:
+            A 1D NumPy array representing the dense observation.
+        """
+        # Get positions of all entities in this agent's reference frame
+        entity_pos = []
+        for entity in world.landmarks:
+            entity_pos.append(entity.state.p_pos - agent.state.p_pos)
+
+        # Get positions of all other agents
+        other_pos = []
+        for other in world.agents:
+            if other is agent:
+                continue
+            other_pos.append(other.state.p_pos - agent.state.p_pos)
+
+        # Concatenate all features to form the dense observation
+        rew_mask_channel = upsample_channel(world.reward_mask,
+                                target_size=[5 * self.grid_resolution, 5 * self.grid_resolution])
+
+        print("REW MASK CHANNEL: ", np.concatenate([agent.state.p_vel] + [agent.state.p_pos] + [agent.state.p_angle] + [
+            agent.state.p_angle_vel] + entity_pos + other_pos + [rew_mask_channel.flatten()]) )
+
+        return np.concatenate([agent.state.p_vel] + [agent.state.p_pos] + [agent.state.p_angle] + [
+            agent.state.p_angle_vel] + entity_pos + other_pos + [rew_mask_channel.flatten()]) 
+    
+
+
     def observation(self, agent, world):
         if self.observation_mode == "dense":
             return self._get_dense_obs(agent, world)
@@ -474,5 +521,7 @@ class SurveyScenario(BaseScenario):
             return self._get_hybrid_obs(agent, world)
         elif self.observation_mode == "upscaled_image":
             return self._get_upscaled_img_obs(agent, world)
+        elif self.observation_mode == "dense_w_grid":
+            return self._get_dense_w_grid_obs(agent, world)
         else:
             raise ValueError("Invalid observation mode selected. Please set this parameter to 'dense' or 'image'.")
