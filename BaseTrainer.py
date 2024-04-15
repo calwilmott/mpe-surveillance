@@ -188,9 +188,9 @@ class BaseTrainer:
             self.trainer.add_experience(state, action, reward, next_state, done)
 
         # Uses map reward to allow for a fair comparison between reward types
-        if self.env.scenario.reward_type != "map":
-            single_reward = self.env.scenario.get_map_reward(self.env.world)
-            reward = [single_reward] * self.num_agents
+        # if self.env.scenario.reward_type != "map":
+        #     single_reward = self.env.scenario.get_map_reward(self.env.world)
+        #     reward = [single_reward] * self.num_agents
 
         if self.step_count >= self.trainer.params.num_steps:
             finished = True
