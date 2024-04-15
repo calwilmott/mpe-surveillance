@@ -167,6 +167,7 @@ class SurveyScenario(BaseScenario):
     def initialize_agent_position(self, agent, world):
         while True:
             # Generate a random position for the agent
+            np.random.seed(None)
             agent.state.p_pos = np.random.uniform(-1, +1, world.dim_p)
             agent.state.p_vel = np.zeros(world.dim_p)
             agent.state.p_angle = np.random.uniform(0, 2 * np.pi, 1)
