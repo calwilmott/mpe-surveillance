@@ -82,7 +82,7 @@ class MultiAgentEnv(gym.Env):
                 self.observation_space.append(spaces.Box(low=0, high=1, shape=observation_shape, dtype=np.float32))
 
             else:
-                raise ValueError(f"Unknown observation mode: {observation_mode}")
+                raise ValueError("Unknown observation mode: ", observation_mode)
             agent.action.c = np.zeros(self.world.dim_c)
 
         # rendering

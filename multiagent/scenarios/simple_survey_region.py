@@ -7,7 +7,7 @@ from multiagent.obs_utils import radial_basis_obs, upsample_channel
 
 class SurveyScenario(BaseScenario):
     def __init__(self, num_obstacles, num_agents, vision_dist, grid_resolution, grid_max_reward, reward_delta,
-                 observation_mode, seed=None, reward_type="pov"):
+                 observation_mode, seed=None, reward_type="pov",collaborative=False):
         self.num_obstacles = num_obstacles
         self.num_agents = num_agents
         self.vision_dist = vision_dist
@@ -19,11 +19,12 @@ class SurveyScenario(BaseScenario):
         self.original_seed = seed
         self.reward_type = reward_type
         self.all_line_points = []
+        self.collaborative = collaborative
 
     def make_world(self):
         world = World()
         world.dim_c = 2
-        world.collaborative = False
+        world.collaborative = self.collaborative
 
         # add agents
         world.agents = [Agent() for i in range(self.num_agents)]
