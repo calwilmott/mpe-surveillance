@@ -19,6 +19,7 @@ class SurveyScenario(BaseScenario):
         self.original_seed = seed
         self.reward_type = reward_type
         self.all_line_points = []
+        self.collaborative = collaborative
 
     def make_world(self):
         world = World()
