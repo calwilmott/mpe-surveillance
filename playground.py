@@ -5,12 +5,12 @@ from multiagent.utils.visualization import visualize_image_observation
 # Change to have all of the configurable items out of the scenario
 # Would be good to have a configuration loader method as well
 for idx in range(100):
-    env = SurveyEnv(num_agents=1, num_obstacles=4, vision_dist=0.2, grid_resolution=10, grid_max_reward=1, reward_delta=0.01, observation_mode="image")
+    env = SurveyEnv(num_agents=3, num_obstacles=4, vision_dist=0.2, grid_resolution=10, grid_max_reward=1, reward_delta=0.01, observation_mode="image")
     env.reset()
     if idx < 10:
-        env.save_world(f'/Users/cwilmott/Desktop/Other/mpe/mpe-surveillance/baseline_worlds_single_agent/world_0{idx}.pkl')
+        env.save_world(f'/Users/cwilmott/Desktop/Other/mpe/mpe-surveillance/baseline_worlds/world_0{idx}.pkl')
     else:
-        env.save_world(f'/Users/cwilmott/Desktop/Other/mpe/mpe-surveillance/baseline_worlds_single_agent/world_{idx}.pkl')
+        env.save_world(f'/Users/cwilmott/Desktop/Other/mpe/mpe-surveillance/baseline_worlds/world_{idx}.pkl')
 
 # while True:
 #     # first dimension in action space is number of agents, second is action space
