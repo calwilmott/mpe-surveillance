@@ -137,8 +137,8 @@ class BaseTrainer:
         seed_reset = False
 
         if self.env.original_seed is None:
-            self.env.original_seed = 81
-            self.env.seed = 81
+            self.env.scenario.original_seed = 81
+            self.env.scenario.seed = 81
             seed_reset = True
 
         state = self.env.reset()
@@ -159,8 +159,8 @@ class BaseTrainer:
             self.log_tensorboard(avg_ep_reward, ep_step_rewards, title="test")
 
         if seed_reset:
-            self.env.original_seed = None
-            self.env.seed = None
+            self.env.scenario.original_seed = None
+            self.env.scenario.seed = None
 
         return ep_step_rewards
 
