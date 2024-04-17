@@ -136,7 +136,7 @@ class BaseTrainer:
         self.step_count = 0
         seed_reset = False
 
-        if self.env.original_seed is None:
+        if self.env.scenario.original_seed is None:
             self.env.scenario.original_seed = 81
             self.env.scenario.seed = 81
             seed_reset = True
