@@ -134,6 +134,13 @@ class BaseTrainer:
 
     def test_episode(self, render_test=False):
         self.step_count = 0
+        seed_reset = False
+
+        if self.env.original_seed is None:
+            self.env.original_seed = 81
+            self.env.seed = 81
+            seed_reset = True
+
         state = self.env.reset()
         done = False
         ep_step_rewards = []
@@ -150,6 +157,10 @@ class BaseTrainer:
         if not render_test:
             avg_ep_reward = np.average(ep_step_rewards)
             self.log_tensorboard(avg_ep_reward, ep_step_rewards, title="test")
+
+        if seed_reset:
+            self.env.original_seed = None
+            self.env.seed = None
 
         return ep_step_rewards
 
@@ -188,9 +199,9 @@ class BaseTrainer:
             self.trainer.add_experience(state, action, reward, next_state, done)
 
         # Uses map reward to allow for a fair comparison between reward types
-        # if self.env.scenario.reward_type != "map":
-        #     single_reward = self.env.scenario.get_map_reward(self.env.world)
-        #     reward = [single_reward] * self.num_agents
+        if self.env.scenario.reward_type != "map":
+            single_reward = self.env.scenario.get_map_reward(self.env.world)
+            reward = [single_reward] * self.num_agents
 
         if self.step_count >= self.trainer.params.num_steps:
             finished = True
