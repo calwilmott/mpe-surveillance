@@ -154,9 +154,11 @@ class BaseTrainer:
                 self.env.render()
                 time.sleep(0.0001)
 
+        avg_ep_reward = np.average(ep_step_rewards)
         if not render_test:
-            avg_ep_reward = np.average(ep_step_rewards)
             self.log_tensorboard(avg_ep_reward, ep_step_rewards, title="test")
+        else:
+            print(avg_ep_reward)
 
         if seed_reset:
             self.env.scenario.original_seed = None
