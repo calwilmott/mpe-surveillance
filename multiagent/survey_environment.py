@@ -1,3 +1,7 @@
+import copy
+
+import numpy as np
+
 from multiagent.environment import MultiAgentEnv
 from multiagent.scenarios.simple_survey_region import SurveyScenario
 import pickle
@@ -5,7 +9,7 @@ import pickle
 class SurveyEnv(MultiAgentEnv):
     def __init__(self, num_obstacles: int = 4, num_agents: int = 3, vision_dist: float = 0.5, grid_resolution: int = 10,
                  grid_max_reward: float = 1.0, reward_delta: float = 0.0001, observation_mode: str = "image",
-                 seed: int = None, reward_type: str = "pov",collaborative=False):
+                 seed: int = None, reward_type: str = "pov", collaborative=False, world_filename=None):
         """
         Initializes the Survey environment with the specified configuration.
 
@@ -27,10 +31,17 @@ class SurveyEnv(MultiAgentEnv):
 
         # Load the scenario with the specified parameters
         self.scenario = SurveyScenario(num_obstacles, num_agents, vision_dist, grid_resolution, grid_max_reward,
-                                       reward_delta, observation_mode, seed, reward_type)
+                                       reward_delta, observation_mode, seed, reward_type, collaborative, world_filename)
 
         # Create the world
-        world = self.scenario.make_world()
+        if world_filename is None:
+            world = self.scenario.make_world()
+            reset_callback = self.scenario.reset_world
+            self.loaded_world = None
+        else:
+            self.load_world(world_filename)
+            world = self.world
+            reset_callback = self.reload_world
 
         if observation_mode == "image":
             obs_shape = self.scenario._get_img_obs(world.agents[0], world).shape
@@ -42,13 +53,26 @@ class SurveyEnv(MultiAgentEnv):
         # Initialize the parent class with the necessary functions
         obs_shape = self.scenario._get_img_obs(world.agents[0], world).shape
 
-        super().__init__(world, self.scenario.reset_world, self.scenario.reward, self.scenario.observation,
+        super().__init__(world, reset_callback, self.scenario.reward, self.scenario.observation,
                          observation_mode=observation_mode, observation_shape=obs_shape)
-        
+
     def save_world(self, filename):
         with open(filename, 'wb') as f:
             pickle.dump(self.world, f)
-    
+
     def load_world(self, filename):
         with open(filename, 'rb') as f:
             self.world = pickle.load(f)
+            self.loaded_world = copy.deepcopy(self.world)
+
+    def reload_world(self, _):
+        self.world = copy.deepcopy(self.loaded_world)
+
+        self.world.grid = np.ones((self.scenario.grid_resolution, self.scenario.grid_resolution))
+
+        # Random properties for agents
+        for i, agent in enumerate(self.world.agents):
+            agent.color = np.array([0.35, 0.35, 0.85])
+            # Initialize agent position
+            self.scenario.initialize_agent_position(agent, self.world)
+            self.scenario.reward(agent, self.world)

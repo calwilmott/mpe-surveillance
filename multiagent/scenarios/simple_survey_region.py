@@ -7,7 +7,7 @@ from multiagent.obs_utils import radial_basis_obs, upsample_channel
 
 class SurveyScenario(BaseScenario):
     def __init__(self, num_obstacles, num_agents, vision_dist, grid_resolution, grid_max_reward, reward_delta,
-                 observation_mode, seed=None, reward_type="pov",collaborative=False):
+                 observation_mode, seed=None, reward_type="pov", collaborative=False, world_filename=None):
         self.num_obstacles = num_obstacles
         self.num_agents = num_agents
         self.vision_dist = vision_dist
@@ -20,6 +20,7 @@ class SurveyScenario(BaseScenario):
         self.reward_type = reward_type
         self.all_line_points = []
         self.collaborative = collaborative
+        self.world_filename = world_filename
 
     def make_world(self):
         world = World()
@@ -137,33 +138,37 @@ class SurveyScenario(BaseScenario):
 
     def reset_world(self, world):
 
-        # Reset obstacles
-        self.reset_seed()
-        world.obstacles = [self._create_random_obstacle(i) for i in range(self.num_obstacles)]
-        world.obstacle_mask = self._create_obstacle_mask(world)
+        if self.world_filename is None:
+            # Reset obstacles
+            self.reset_seed()
+            world.obstacles = [self._create_random_obstacle(i) for i in range(self.num_obstacles)]
+            world.obstacle_mask = self._create_obstacle_mask(world)
 
-        # Reset grid and reward mask
-        world.grid = np.ones((self.grid_resolution, self.grid_resolution))
-        world.reward_mask = self._create_reward_mask()
+            # Reset grid and reward mask
+            world.grid = np.ones((self.grid_resolution, self.grid_resolution))
+            world.reward_mask = self._create_reward_mask()
 
-        # Random properties for landmarks
-        for i, landmark in enumerate(world.landmarks):
-            landmark.color = np.array([0.25, 0.25, 0.25])
-            # Random position for landmarks
-            self.random_seed()
-            landmark.state.p_pos = np.random.uniform(-1, +1, world.dim_p)
-            landmark.state.p_vel = np.zeros(world.dim_p)
-                # Random properties for agents
-        for i, agent in enumerate(world.agents):
-            agent.color = np.array([0.35, 0.35, 0.85])
-            # Initialize agent position
-            self.initialize_agent_position(agent, world)
+            # Random properties for landmarks
+            for i, landmark in enumerate(world.landmarks):
+                landmark.color = np.array([0.25, 0.25, 0.25])
+                # Random position for landmarks
+                self.random_seed()
+                landmark.state.p_pos = np.random.uniform(-1, +1, world.dim_p)
+                landmark.state.p_vel = np.zeros(world.dim_p)
+
+            # Random properties for agents
+            for i, agent in enumerate(world.agents):
+                agent.color = np.array([0.35, 0.35, 0.85])
+                # Initialize agent position
+                self.initialize_agent_position(agent, world)
+                self.reward(agent, world)
 
 
     def initialize_agent_position(self, agent, world):
         np.random.seed(None)
         while True:
             # Generate a random position for the agent
+            np.random.seed(None)
             agent.state.p_pos = np.random.uniform(-1, +1, world.dim_p)
             agent.state.p_vel = np.zeros(world.dim_p)
             agent.state.p_angle = np.random.uniform(0, 2 * np.pi, 1)
@@ -249,10 +254,15 @@ class SurveyScenario(BaseScenario):
             self.all_line_points = []
 
         if self.reward_type == "map":
-            # Doesn't count obstacles and reward_maks cells to calculate reward
-            discount_cells = np.sum(np.logical_not(np.logical_and(world.obstacle_mask, world.reward_mask)))
-            grid_area = self.grid_resolution * self.grid_resolution
-            reward = grid_area - np.sum(world.grid) - discount_cells
+            reward = self.get_map_reward(world)
+
+        return reward
+
+    def get_map_reward(self, world):
+        # Doesn't count obstacles and reward_maks cells to calculate reward
+        discount_cells = np.sum(np.logical_not(np.logical_and(world.obstacle_mask, world.reward_mask)))
+        grid_area = self.grid_resolution * self.grid_resolution
+        reward = grid_area - np.sum(world.grid) - discount_cells
 
         return reward
 
