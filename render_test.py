@@ -1,7 +1,12 @@
+import time
+
+import numpy as np
+
 from multiagent.survey_environment import SurveyEnv
 from BaseTrainer import BaseTrainer
 
 run_number = input("Run number (ex: 5):\n")
+multiple_runs = input("Execute multiple runs? (y/N)\n")
 
 params = {
     "num_agents": 1,
@@ -9,7 +14,8 @@ params = {
     "observation_mode": "hybrid",
     "reward_type": "pov",
     "deep_discretization": False,
-    "original_seed": 81
+    "original_seed": 81,
+    "world_filename": None
 }
 
 with open("runs/run" + run_number + "/run_description.txt") as f:
@@ -26,14 +32,32 @@ with open("runs/run" + run_number + "/run_description.txt") as f:
                     params[key] = line_values[-1][0] == "T"
                 elif param_type == int and line_values[-1][0] == "N":
                     params[key] = None
+                elif params[key] is None:
+                    # Special condition for world_filename
+                    params[key] = str(line_values[-1][:-1])
                 else:
                     params[key] = param_type(line_values[-1])
 
 env = SurveyEnv(num_agents=params["num_agents"], num_obstacles=4, vision_dist=0.2, grid_resolution=10,
                 grid_max_reward=1, reward_delta=params["reward_delta"], observation_mode=params["observation_mode"],
-                seed=params["original_seed"], reward_type=params["reward_type"])
+                seed=params["original_seed"], reward_type=params["reward_type"],
+                world_filename=params["world_filename"])
 base_trainer = BaseTrainer(env, params["observation_mode"], params["num_agents"],
                            deep_discretization=params["deep_discretization"], is_render=True, is_test=True)
 
 base_trainer.agent.load_weights("runs/run" + run_number + "/best_weights")
-base_trainer.test_episode(render_test=True)
+
+if multiple_runs.lower() == "y":
+    ep_rewards = []
+    for i in range(10):
+        avg_ep_reward = np.average(base_trainer.test_episode(render_test=True))
+        if avg_ep_reward < 11:
+            print("BUG DETECTED!")
+            exit(1)
+        ep_rewards.append(avg_ep_reward)
+
+    ep_rewards.remove(np.min(ep_rewards))
+    ep_rewards.remove(np.max(ep_rewards))
+    print("AVG:", np.average(ep_rewards))
+else:
+    base_trainer.test_episode(render_test=True)
