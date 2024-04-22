@@ -12,11 +12,8 @@ def get_value_from_file(value, type, line):
     elif type == bool:
         # Checks for booleans values
         value = line[-1][0] == "T"
-    elif type == int and line[-1][0] == "N":
+    elif line[-1][0] == "N" and (type == int or value is None):
         # Value in file is None
-        value = None
-    elif value is None and line[-1][0] == "N":
-        # Special condition for world_filename with value of None
         value = None
     elif value is None:
         # Special condition for world_filename
