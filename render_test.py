@@ -5,6 +5,26 @@ import numpy as np
 from multiagent.survey_environment import SurveyEnv
 from BaseTrainer import BaseTrainer
 
+
+def get_value_from_file(value, type, line):
+    if (type == int or type == str) and line[-1][0] == "N":
+        # Value in file is None
+        value = None
+    elif type == str:
+        # Removes \n from strings
+        value = type(line[-1][:-1])
+    elif type == bool:
+        # Checks for booleans values
+        value = line[-1][0] == "T"
+    elif value is None:
+        # Special condition for world_filename
+        value = str(line[-1][:-1])
+    else:
+        value = type(line[-1])
+
+    return value
+
+
 run_number = input("Run number (ex: 5):\n")
 multiple_runs = input("Execute multiple runs? (y/N)\n")
 
@@ -24,19 +44,7 @@ with open("runs/run" + run_number + "/run_description.txt") as f:
             if key in line:
                 line_values = line.split(" ")
                 param_type = type(params[key])
-                if param_type == str:
-                    # Removes \n from strings
-                    params[key] = param_type(line_values[-1][:-1])
-                elif param_type == bool:
-                    # Checks for booleans values
-                    params[key] = line_values[-1][0] == "T"
-                elif param_type == int and line_values[-1][0] == "N":
-                    params[key] = None
-                elif params[key] is None:
-                    # Special condition for world_filename
-                    params[key] = str(line_values[-1][:-1])
-                else:
-                    params[key] = param_type(line_values[-1])
+                params[key] = get_value_from_file(params[key], param_type, line_values)
 
 env = SurveyEnv(num_agents=params["num_agents"], num_obstacles=4, vision_dist=0.2, grid_resolution=10,
                 grid_max_reward=1, reward_delta=params["reward_delta"], observation_mode=params["observation_mode"],
