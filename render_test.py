@@ -1,6 +1,4 @@
 import time
-from types import NoneType
-
 import numpy as np
 
 from multiagent.survey_environment import SurveyEnv
@@ -8,15 +6,18 @@ from BaseTrainer import BaseTrainer
 
 
 def get_value_from_file(value, type, line):
-    if (type == int or type == NoneType) and line[-1][0] == "N":
-        # Value in file is None
-        value = None
-    elif type == str:
+    if type == str:
         # Removes \n from strings
         value = type(line[-1][:-1])
     elif type == bool:
         # Checks for booleans values
         value = line[-1][0] == "T"
+    elif type == int and line[-1][0] == "N":
+        # Value in file is None
+        value = None
+    elif value is None and line[-1][0] == "N":
+        # Special condition for world_filename with value of None
+        value = None
     elif value is None:
         # Special condition for world_filename
         value = str(line[-1][:-1])
