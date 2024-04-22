@@ -1,4 +1,5 @@
 import time
+from types import NoneType
 
 import numpy as np
 
@@ -7,7 +8,7 @@ from BaseTrainer import BaseTrainer
 
 
 def get_value_from_file(value, type, line):
-    if (type == int or type == str) and line[-1][0] == "N":
+    if (type == int or type == NoneType) and line[-1][0] == "N":
         # Value in file is None
         value = None
     elif type == str:
