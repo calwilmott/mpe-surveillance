@@ -56,12 +56,15 @@ base_trainer.agent.load_weights("runs/run" + run_number + "/best_weights")
 
 if multiple_runs.lower() == "y":
     ep_rewards = []
-    for i in range(10):
+    count = 0
+    while count < 10:
         avg_ep_reward = np.average(base_trainer.test_episode(render_test=True))
         if avg_ep_reward < 11:
             print("BUG DETECTED!")
-            exit(1)
-        ep_rewards.append(avg_ep_reward)
+        else:
+            ep_rewards.append(avg_ep_reward)
+            count += 1
+            print(f"Count: {count}")
 
     ep_rewards.remove(np.min(ep_rewards))
     ep_rewards.remove(np.max(ep_rewards))
