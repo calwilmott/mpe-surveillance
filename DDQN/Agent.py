@@ -16,18 +16,18 @@ class DDQNAgentParams:
         self.hidden_layer_size = 256
         self.hidden_layer_num = 3
 
-        # Training Params
+        # Global-Local Map
+        self.use_global_local = True
+        self.global_map_scaling = 3
+        self.local_map_size = 17
+
+        # Training Hyperparams
         self.learning_rate = 3e-5
         self.alpha = 0.005
         self.gamma = 0.95
 
         # Exploration strategy
         self.soft_max_scaling = 0.1
-
-        # Global-Local Map
-        self.use_global_local = True
-        self.global_map_scaling = 3
-        self.local_map_size = 17
 
         # Printing
         self.print_summary = False

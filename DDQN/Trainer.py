@@ -5,17 +5,21 @@ import numpy as np
 
 class DDQNTrainerParams:
     def __init__(self):
+        # RL Training parameters
         self.batch_size = 128
         self.num_steps = 500
-        self.num_steps_memory = 500  # Number of steps taken by episodes while filling the memory buffer
+        self.num_steps_memory = 500  # Number of steps taken by episodes while filling the memory buffer,
+        # allows for a different value from num_steps to be used
         self.num_episodes = 2000
-        # Save interval is s=num_episodes//5, as long as s is in the range (10, 250)
-        self.save_interval = min(250, max(int(self.num_episodes) // 5, 10))
+
+        # Callbacks
+        self.save_interval = min(250, max(int(self.num_episodes) // 5, 10))  # Save interval is s=num_episodes//5,
+        # as long as s is in the range (10, 250)
         self.eval_interval = 5
+
         # Replay Memory parameters
         self.rm_pre_fill_ratio = 0.6
         self.rm_size = 15000
-        self.load_model = ""
 
 
 class DDQNTrainer:
@@ -23,10 +27,6 @@ class DDQNTrainer:
         self.params = params
         self.replay_memory = ReplayMemory(size=params.rm_size)
         self.agent = agent
-
-        if self.params.load_model != "":
-            print("Loading model", self.params.load_model, "for agent")
-            self.agent.load_weights(self.params.load_model)
 
         self.prefill_bar = None
 

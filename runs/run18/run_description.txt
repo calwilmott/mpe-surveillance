@@ -1,0 +1,44 @@
+runs/run18/
+TRAINER:
+batch_size: 128
+num_steps: 500
+num_steps_memory: 500
+num_episodes: 2000
+save_interval: 250
+eval_interval: 5
+rm_pre_fill_ratio: 0.6
+rm_size: 15000
+load_model: 
+
+AGENT:
+conv_layers: 2
+conv_kernel_size: 5
+conv_kernels: 16
+hidden_layer_size: 256
+hidden_layer_num: 3
+learning_rate: 3e-05
+alpha: 0.005
+gamma: 0.95
+soft_max_scaling: 0.1
+use_global_local: True
+global_map_scaling: 3
+local_map_size: 17
+print_summary: False
+
+ENV:
+num_obstacles: 4
+num_agents: 1
+vision_dist: 0.2
+grid_resolution: 10
+grid_max_reward: 1
+reward_delta: 0.01
+observation_mode: hybrid
+seed: 81
+original_seed: 81
+reward_type: pov
+all_line_points: []
+collaborative: False
+world_filename: baseline_worlds_single_agent/world_01.pkl
+
+DEEP DISCRETIZATION:
+deep_discretization: False

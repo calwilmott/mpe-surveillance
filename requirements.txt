@@ -10,8 +10,6 @@ six==1.16.0
 typing-extensions==4.8.0
 wheel==0.41.2
 matplotlib~=3.8.0
-
-
 multiagent~=0.0.1
 tensorflow~=2.10.0
 tqdm~=4.66.1
